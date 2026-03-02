@@ -1,5 +1,5 @@
 ---
-title: "Upgrading Agent Control and Managed Agents"
+title: "Upgrade agents"
 metaDescription: "A simple, centralized process for updating agent versions across your entire fleet"
 freshnessValidatedDate: never
 ---
@@ -8,62 +8,96 @@ freshnessValidatedDate: never
   Agent Control and New Relic Control are now **generally available** for Kubernetes! Support for Linux hosts and Windows hosts is also in **public preview** program, pursuant to our [pre-release policies](/docs/licenses/license-information/referenced-policies/new-relic-pre-release-policy).
 </Callout>
 
-## Overview
+Agent Control provides a centralized way to manage the full lifecycle of your agents, including updates. Instead of manually updating agents on each host or cluster, you define your desired state in Fleet Control — Agent Control handles the rest automatically.
 
-Agent Control provides a seamless and centralized way to manage the entire lifecycle of your agents, including updates. Instead of manually updating agents on each host or cluster, you define your desired state in Fleet Control, and Agent Control automatically handles the rest.
+<Callout variant="tip" title="Version compatibility">
+  Agent Control is backward compatible with managed agent versions. You can upgrade Agent Control independently from your managed agents, and you can upgrade managed agents independently from each other. There is no required upgrade order.
+</Callout>
 
-The update process for both Agent Control and the agents it manages is designed to be non-disruptive and automated.
+## Upgrade managed agents
 
-### Key benefits of the update process with New Relic Control
-- Centralized Control: Manage all agent versions for your entire fleet from a single location.
-- Non-disruptive: Updates are performed using rolling update strategies to prevent downtime.
-- Automated: Once you define a new version, the entire deployment and reconciliation process is handled automatically.
-- Resilient: The system is designed to be resilient to failed updates and can fall back to the last known good state if an issue occurs.
+You can update any agent managed by Agent Control by changing its version in the fleet's remote configuration in Fleet Control. This declarative approach ensures consistency and reliability across your entire fleet.
 
-## Updating your managed Agents
-You can update any agent managed by Agent Control by simply changing its version in the remote configuration within Fleet Control. This declarative approach ensures consistency and reliability across your entire fleet.
+1. Navigate to the configuration for your fleet in Fleet Control.
+2. Locate the agent you want to update (for example, `infrastructure`) and change the `chart_version` value to the new version.
+3. Save and deploy the updated configuration.
 
-- **Edit the Configuration:** Navigate to the configuration for your fleet in Fleet Control.
-- **Update the Version:** Locate the agent you want to update (for example, `infrastructure`) and change the `chart_version` value to the new version number.
-- **Deploy the Changes:** Save and deploy the updated configuration.
+Agent Control automatically detects the change and performs a non-disruptive rolling update, ensuring new agents are running and healthy before replacing the old ones.
 
-Agent Control will automatically detect the change and perform a non-disruptive rolling update, ensuring that your new agents are running and healthy before replacing the old ones.
+### Example: Upgrade the infrastructure agent
 
-### Example: Upgrading the New Relic infrastructure agent
-
-This example shows how to upgrade the infrastructure agent to a new version.
-
-```shell
-# Remote configuration for a single agent
-chart_version: "5.0.109"  # Change this value
-chart_values:
-  newrelic-infrastructure:
-    enableProcessMetrics: true
+```yaml
+# Remote configuration for the infrastructure agent
+infrastructure:
+  chart_version: "5.0.110"  # Change this to the new version
+  chart_values:
+    newrelic-infrastructure:
+      enableProcessMetrics: true
 ```
 
-## Upgrading Agent Control
+## Upgrade Agent Control
 
-### Kubernetes
+<Tabs>
+  <TabsBar>
+    <TabsBarItem id="upgrade-k8s">Kubernetes</TabsBarItem>
+    <TabsBarItem id="upgrade-linux">Linux hosts</TabsBarItem>
+    <TabsBarItem id="upgrade-windows">Windows hosts</TabsBarItem>
+  </TabsBar>
 
-The following instructions apply to Agent Control running on a Kubernetes cluster.
+  <TabsPages>
+    <TabsPageItem id="upgrade-k8s">
 
-Agent Control is capable of updating itself remotely. This ensures that the supervisor running on your cluster is always up to date with the latest features, performance improvements, and security patches.
+Agent Control on Kubernetes can update itself remotely through Fleet Control, ensuring the supervisor on your cluster is always up to date.
 
-The process for updating the Agent Control supervisor is the same as for any other managed agent: you specify the new version in the configuration and deploy the changes from Fleet Control.
+The process is the same as upgrading any managed agent: specify the new version in the Fleet Control configuration and deploy.
 
-1. Edit the Agent Control configuration: In Fleet Control, access the configuration for Agent Control itself.
-2. Update the `chart_version`: Change the `chart_version` to the new desired version.
-3. Deploy the Changes: Save and deploy the configuration.
+<Steps>
+  <Step>
+    In Fleet Control, open the configuration for your Agent Control deployment.
+  </Step>
 
-This process triggers a rolling update of the Agent Control pods on your cluster. Kubernetes' built-in health checks ensure the new version is healthy before the old one is terminated for a non-disruptive upgrade.
+  <Step>
+    Update the `chart_version` field to the new desired version:
 
-### Linux hosts
+    ```yaml
+    chart_version: "0.6.0"  # Replace with the target version
+    ```
+  </Step>
+
+  <Step>
+    Save and deploy the configuration.
+
+    This triggers a rolling update of the Agent Control pods on your cluster. Kubernetes built-in health checks ensure the new version is healthy before the old one is terminated.
+  </Step>
+</Steps>
+
+<CollapserGroup>
+  <Collapser id="rollback-k8s" title="Rollback Agent Control on Kubernetes">
+    If a Kubernetes upgrade causes issues, set the `chart_version` back to the previous version in Fleet Control and redeploy.
+
+    Alternatively, use Helm directly:
+
+    ```shell
+    # List recent Helm releases to find the revision to roll back to
+    helm history agent-control-bootstrap -n newrelic
+
+    # Roll back to the previous revision
+    helm rollback agent-control-bootstrap -n newrelic
+    ```
+  </Collapser>
+</CollapserGroup>
+
+    </TabsPageItem>
+
+    <TabsPageItem id="upgrade-linux">
+
+Upgrade Agent Control on Linux using your distribution's package manager:
 
 <Tabs>
   <TabsBar>
     <TabsBarItem id="upgrade-debian">Debian, Ubuntu</TabsBarItem>
     <TabsBarItem id="upgrade-suse">SLES</TabsBarItem>
-    <TabsBarItem id="upgrade-redhat">Amazon Linux, CentOS, Debian</TabsBarItem>
+    <TabsBarItem id="upgrade-redhat">Amazon Linux, CentOS, RHEL</TabsBarItem>
   </TabsBar>
 
   <TabsPages>
@@ -87,42 +121,130 @@ This process triggers a rolling update of the Agent Control pods on your cluster
   </TabsPages>
 </Tabs>
 
+Managed agents (Infrastructure Agent, NRDOT) on Linux are upgraded through Fleet Control — update the desired agent version in your fleet configuration and deploy.
 
+<CollapserGroup>
+  <Collapser id="rollback-linux" title="Rollback Agent Control on Linux">
+    To roll back to a previous version, install the specific version explicitly:
 
-### Windows hosts
+    **Debian / Ubuntu:**
+    ```bash
+    sudo apt-get install newrelic-agent-control=<previous-version> -y
+    ```
+
+    **Amazon Linux / CentOS / RHEL:**
+    ```bash
+    sudo yum downgrade newrelic-agent-control-<previous-version> -y
+    ```
+
+    **SLES:**
+    ```bash
+    sudo zypper install --oldpackage newrelic-agent-control-<previous-version>
+    ```
+
+    After downgrading, restart the service:
+
+    ```bash
+    sudo systemctl restart newrelic-agent-control
+    ```
+  </Collapser>
+</CollapserGroup>
+
+    </TabsPageItem>
+
+    <TabsPageItem id="upgrade-windows">
 
 Agent Control on Windows is upgraded by re-running the installation script provided in the guided install. The script downloads the latest version and replaces the existing executable while preserving your configuration files.
 
-1. Open PowerShell with Administrator privileges.
-2. Run the installation script from the guided install for the new version.
-3. Verify the upgrade by checking the service status:
+<Steps>
+  <Step>
+    Open PowerShell with Administrator privileges.
+  </Step>
 
-   ```powershell
-   Get-Service -Name newrelic-agent-control
-   Invoke-WebRequest -Uri "http://localhost:51200/status" -UseBasicParsing
-   ```
+  <Step>
+    Run the installation script from the guided install for the new version. The script automatically detects the existing installation and upgrades it in place.
+  </Step>
 
-Managed agents (Infrastructure Agent, NRDOT) are upgraded through Fleet Control the same way as on other platforms — update the desired agent version in your fleet configuration and deploy the changes.
+  <Step>
+    Verify the upgrade by checking the service status and health endpoint:
 
-### Start, stop, and restart Agent Control [#start-stop-restart]
+    ```powershell
+    Get-Service -Name newrelic-agent-control
+    Invoke-WebRequest -Uri "http://localhost:51200/status" -UseBasicParsing
+    ```
+  </Step>
+</Steps>
 
-Agent Control starts automatically after you run the installation script.
+Managed agents on Windows are upgraded through Fleet Control — update the desired agent version in your fleet configuration and deploy.
 
-#### Linux
-For Linux, ensure you use the correct command for your init system. Select `start`, `stop`, `restart`, or `status` as appropriate.
+<CollapserGroup>
+  <Collapser id="rollback-windows" title="Rollback Agent Control on Windows">
+    To roll back Agent Control on Windows, re-run the installation script for the previous version from the guided install. The script replaces the current executable while preserving your configuration files.
 
-Here's an example for `systemd`:
+    After re-running the script, verify the service is running:
 
-```shell
-sudo systemctl <start|stop|restart|status> newrelic-agent-control
-```
+    ```powershell
+    Get-Service -Name newrelic-agent-control
+    ```
+  </Collapser>
+</CollapserGroup>
 
-#### Windows
-Run these commands in PowerShell with Administrator privileges:
+    </TabsPageItem>
+  </TabsPages>
+</Tabs>
 
-```powershell
-Start-Service -Name newrelic-agent-control
-Stop-Service -Name newrelic-agent-control
-Restart-Service -Name newrelic-agent-control
-Get-Service -Name newrelic-agent-control
-```
+## Start, stop, and restart Agent Control [#start-stop-restart]
+
+<Tabs>
+  <TabsBar>
+    <TabsBarItem id="service-linux">Linux</TabsBarItem>
+    <TabsBarItem id="service-windows">Windows</TabsBarItem>
+  </TabsBar>
+
+  <TabsPages>
+    <TabsPageItem id="service-linux">
+      Agent Control uses `systemd` on Linux. Select `start`, `stop`, `restart`, or `status` as needed:
+
+      ```shell
+      sudo systemctl start newrelic-agent-control
+      sudo systemctl stop newrelic-agent-control
+      sudo systemctl restart newrelic-agent-control
+      sudo systemctl status newrelic-agent-control
+      ```
+    </TabsPageItem>
+
+    <TabsPageItem id="service-windows">
+      Run these commands in PowerShell with Administrator privileges:
+
+      ```powershell
+      Start-Service -Name newrelic-agent-control
+      Stop-Service -Name newrelic-agent-control
+      Restart-Service -Name newrelic-agent-control
+      Get-Service -Name newrelic-agent-control
+      ```
+    </TabsPageItem>
+  </TabsPages>
+</Tabs>
+
+<DocTiles>
+  <DocTile
+    title="Monitor Agent Control"
+    path="/docs/new-relic-control/agent-control/monitoring"
+  >
+    Check the health of Agent Control and its managed agents after an upgrade.
+  </DocTile>
+
+  <DocTile
+    title="Configuration reference"
+    path="/docs/new-relic-control/agent-control/configuration"
+  >
+    Update agent configuration through Fleet Control remote config.
+  </DocTile>
+
+  <DocTile
+    title="Troubleshooting"
+    path="/docs/new-relic-control/agent-control/troubleshooting"
+  >
+    Diagnose issues after an upgrade.
+  </DocTile>
+</DocTiles>

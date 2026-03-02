@@ -13,22 +13,27 @@ Agent Control provides a single, unified platform for managing a wide variety of
 
 While Agent Control is designed to support both Kubernetes and host-based environments, support for specific agent types varies. The following table provides a comprehensive overview of which agents can be managed by Agent Control and their support status across environments.
 
-### Current support
+### Support matrix
 
-| Agent type | Kubernetes support | Linux host support | Windows host support |
-| :--- | :---: | :---: | :---: |
-| [**New Relic infrastructure agent**](https://docs.newrelic.com/docs/infrastructure/infrastructure-agent/new-relic-guided-install-overview/) | ✅ Yes | Public Preview | Public Preview |
-| [**New Relic OpenTelemetry Collector (NRDOT)**](https://docs.newrelic.com/docs/opentelemetry/nrdot/nrdot-intro/) | ✅ Yes | ✅ Yes | ⚠️ Experimental |
-| [**Fluent Bit**](https://docs.newrelic.com/docs/logs/forward-logs/forward-your-logs-using-infrastructure-agent/) | ✅ Yes | 🚫 No | 🚫 No |
-| [**New Relic Prometheus agent**](https://docs.newrelic.com/docs/infrastructure/prometheus-integrations/get-started/send-prometheus-metric-data-new-relic/) | ✅ Yes | 🚫 No | 🚫 No |
-| [**New Relic eBPF agent**](https://docs.newrelic.com/docs/ebpf/overview/) | ✅ Yes | ⚠️ Experimental | 🚫 No |
-| [**APM agents (.NET, Java, Node, Python, Ruby)**](https://docs.newrelic.com/docs/apm/new-relic-apm/getting-started/introduction-apm/) | 🚫 No | 🚫 No | 🚫 No |
-
-<Callout variant="important">
-Agent-specific permissions: Agent Control is designed to provide you with flexible permissions management. While Agent Control itself requires a certain level of access to function, the permissions it grants to individual agents are tailored to their specific needs. Below, you can find a breakdown of the permissions required for each agent type.
+<Callout variant="tip" title="How to read this table">
+  - ✅ **Generally Available (GA)** — Fully supported and production-ready.
+  - **Public Preview** — Supported but subject to our [pre-release policies](/docs/licenses/license-information/referenced-policies/new-relic-pre-release-policy).
+  - ⚠️ **Experimental** — Available but not fully tested. Use only in non-critical environments. See the notes below the table.
+  - 🚫 **Not supported** — Not available for this environment.
 </Callout>
 
-## Required Permissions per agent type
+| Agent type | Kubernetes | Linux host | Windows host |
+| :--- | :---: | :---: | :---: |
+| [**New Relic infrastructure agent**](https://docs.newrelic.com/docs/infrastructure/infrastructure-agent/new-relic-guided-install-overview/) | ✅ GA | Public Preview | Public Preview |
+| [**New Relic OpenTelemetry Collector (NRDOT)**](https://docs.newrelic.com/docs/opentelemetry/nrdot/nrdot-intro/) | ✅ GA | ✅ GA | ⚠️ Experimental |
+| [**Fluent Bit**](https://docs.newrelic.com/docs/logs/forward-logs/forward-your-logs-using-infrastructure-agent/) | ✅ GA | 🚫 No | 🚫 No |
+| [**New Relic Prometheus agent**](https://docs.newrelic.com/docs/infrastructure/prometheus-integrations/get-started/send-prometheus-metric-data-new-relic/) | ✅ GA | 🚫 No | 🚫 No |
+| [**New Relic eBPF agent**](https://docs.newrelic.com/docs/ebpf/overview/) | ✅ GA | ⚠️ Experimental | 🚫 No |
+| [**APM agents (.NET, Java, Node, Python, Ruby)**](https://docs.newrelic.com/docs/apm/new-relic-apm/getting-started/introduction-apm/) | 🚫 No | 🚫 No | 🚫 No |
+
+## Required permissions per agent type
+
+Agent Control is designed to grant each agent only the minimum permissions required. The table below summarizes what each agent needs from the host or cluster.
 
 | Agent Type | Key Permissions Required | Environment |
 | :--- | :--- | :--- |
@@ -48,3 +53,26 @@ Agent-specific permissions: Agent Control is designed to provide you with flexib
 
   eBPF is **not supported** on Windows hosts.
 </Callout>
+
+<DocTiles>
+  <DocTile
+    title="Install Agent Control"
+    path="/docs/new-relic-control/agent-control/setup"
+  >
+    Deploy Agent Control on Kubernetes, Linux, or Windows using the guided install.
+  </DocTile>
+
+  <DocTile
+    title="Configuration reference"
+    path="/docs/new-relic-control/agent-control/configuration"
+  >
+    Configure agents locally or remotely through Fleet Control.
+  </DocTile>
+
+  <DocTile
+    title="Migrate existing instrumentation"
+    path="/docs/new-relic-control/agent-control/reinstrumentation"
+  >
+    Move from standalone agent installs to Agent Control management.
+  </DocTile>
+</DocTiles>

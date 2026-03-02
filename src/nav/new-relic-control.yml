@@ -7,17 +7,17 @@ pages:
     pages:
       - title: Overview
         path: /docs/new-relic-control/agent-control/overview
-      - title: Setup & install
+      - title: Install Agent Control
         path: /docs/new-relic-control/agent-control/setup
-      - title: Supported Agent types
+      - title: Supported agent types
         path: /docs/new-relic-control/agent-control/agent-types
-      - title: Reinstrument your agents
+      - title: Migrate existing instrumentation
         path: /docs/new-relic-control/agent-control/reinstrumentation
-      - title: Manage configurations
+      - title: Configuration reference
         path: /docs/new-relic-control/agent-control/configuration
       - title: Upgrade agents
         path: /docs/new-relic-control/agent-control/upgrading
-      - title: Monitor agent health
+      - title: Monitor Agent Control
         path: /docs/new-relic-control/agent-control/monitoring
       - title: Troubleshooting
         path: /docs/new-relic-control/agent-control/troubleshooting

@@ -9,15 +9,18 @@ freshnessValidatedDate: never
 
 Agent Control is a lightweight agent supervisor that runs on Kubernetes clusters and hosts to manage the lifecycle of New Relic and open-source instrumentation agents. Communicating with Fleet Control, it remotely configures, updates, and monitors agent health across fleets.
 
+<Callout variant="tip" title="Key behaviors">
+  - **Starts without agents:** Agent Control installs as a lightweight supervisor with no managed agents running by default. You define which agents to deploy through Fleet Control after installation.
+  - **Remote install and upgrade on Linux and Windows:** On Linux and Windows hosts, you can install, configure, and upgrade agents remotely through Fleet Control — no manual intervention required on each host.
+  - **No automatic agent migration:** Agent Control does not automatically migrate or replace existing agent installations. Uninstall any existing agents before installing Agent Control, then manage them through Fleet Control. See [Migrate existing instrumentation](/docs/new-relic-control/agent-control/reinstrumentation).
+  - **No additional cost:** The supervisor itself doesn't push any telemetry to New Relic. Ingest cost depends only on the instrumentation enabled in your managed agents.
+</Callout>
+
 ## Overview
 
 Managing instrumentation at scale is labor intensive and error prone. Multiple agents, version sprawl, and configuration drift can create telemetry blind spots, compliance risk, and weeks of coordination for even small changes.
 
 Agent Control provides a single, extensible supervisor you install once per host or cluster. It keeps all your New Relic and open source agents healthy and up to date, applies remote configuration, and enforces consistent settings without individually touching each agent.
-
-<Callout variant="tip" title="Note about cost and data ingestion">
-Agent Control can be installed on any supported environment and doesn't require any paid entitlement. The supervisor itself doesn't push any new telemetry to New Relic. Ingest cost will depend on the instrumentation enabled in the managed agents (Infrastructure, APM, Logs).
-</Callout>
 
 ## Architecture
 Agent Control uses a declarative, GitOps-like approach to agent management. It treats the remote configuration received from Fleet Control as the desired state of your instrumentation, ensuring that what you deploy to the fleet is what's running on your clusters.
@@ -44,20 +47,9 @@ With Agent Control installed on each cluster and host, your observability practi
 - **Bi-directional communications:** Authenticated and encrypted communication with agents for real-time troubleshooting and diagnostics.
 - **Security posture:** Standardize how credentials are sourced from secrets providers to centralize handling, automate rotations, and reduce exposure.
 
-<Callout variant="important">
-  To enable this level of control and communication, Agent Control requires specific permissions. It needs to be configured with the necessary access to pull configurations and to interact with local systems to manage the agent lifecycle. When deploying Agent Control, ensure you understand and grant the required permissions to maintain a secure and functional environment.
-  Refer to the following section on Agent Control permissions.
-</Callout>
-
-Agent Control is designed to be a supervisor for managing instrumentation which requires the ability to perform powerful actions within your environment. It's critical to understand and grant the needed permissions.
-
-<Callout variant="tip" title="Key behaviors">
-  - **Starts without agents:** Agent Control installs as a lightweight supervisor with no managed agents running by default. You define which agents to deploy through Fleet Control after installation.
-  - **Remote install and upgrade on Linux:** On Linux hosts, you can install, configure, and upgrade agents remotely through Fleet Control — no manual intervention required on each host.
-  - **No automatic agent migration:** Agent Control does not automatically migrate or replace existing agent installations. Uninstall any existing agents before installing Agent Control, then manage them through Fleet Control. See [Manage existing instrumentation](/docs/new-relic-control/agent-control/reinstrumentation).
-</Callout>
-
 ## Agent Control permissions
+
+Agent Control is designed to be a supervisor for managing instrumentation, which requires the ability to perform powerful actions within your environment. It's critical to understand and grant the required permissions before deploying.
 Deploying and managing agents in a Kubernetes cluster requires a clear understanding of the necessary permissions. Here, we'll explain the roles of both Agent Control and Flux and how they interact to securely install, update, and remove agents while ensuring that each agent only has the permissions it needs.
 
 ### Kubernetes
@@ -67,7 +59,7 @@ In a Kubernetes environment, Agent Control uses Flux as its continuous delivery 
 - **Permissions for Flux:** Flux requires elevated permissions, typically with a `cluster-admin` role, to manage the lifecycle of Helm charts for the agents it deploys. This includes creating `Deployments`, `DaemonSets`, `Services`, `ConfigMaps`, `Secrets`, and other Kubernetes resources on behalf of the user. For security, it's a best practice to ensure that only trusted and verified configurations are used with Agent Control.
 
 ### Linux hosts
-For host-based systems (currently in public preview), Agent Control requires elevated permissions. The supervisor needs to run with root, administrator, or equivalent privileges to perform agent lifecycle tasks such as:
+For Linux and Windows hosts (currently in public preview), Agent Control requires elevated permissions. The supervisor needs to run with root, administrator, or equivalent privileges to perform agent lifecycle tasks such as:
 
 - **Installing new agents:** Copying agent binaries and configuration files in system directories.
 - **Managing agent processes:** Starting, stopping, and restarting services, for example using systemd.
@@ -232,5 +224,34 @@ Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, OsHardwareA
   **Log collection:** Log collection on Windows is supported through the Infrastructure Agent's integrated Fluent Bit. The Infrastructure Agent package includes Fluent Bit binaries for Windows, enabling log forwarding capabilities through the `config_logging` configuration.
 </Callout>
 
-## Next step
-After you've confirmed compatibility and met all the prerequisites, you're ready to [install Agent Control](/docs/new-relic-control/agent-control/setup).
+## Next steps
+
+<DocTiles>
+  <DocTile
+    title="Install Agent Control"
+    path="/docs/new-relic-control/agent-control/setup"
+  >
+    Deploy Agent Control on Kubernetes, Linux, or Windows using the guided install.
+  </DocTile>
+
+  <DocTile
+    title="Supported agent types"
+    path="/docs/new-relic-control/agent-control/agent-types"
+  >
+    Review which agents Agent Control can manage and their support status per environment.
+  </DocTile>
+
+  <DocTile
+    title="Configuration reference"
+    path="/docs/new-relic-control/agent-control/configuration"
+  >
+    Understand local and remote configuration for Kubernetes, Linux, and Windows.
+  </DocTile>
+
+  <DocTile
+    title="Troubleshooting"
+    path="/docs/new-relic-control/agent-control/troubleshooting"
+  >
+    Diagnose and fix common installation and connectivity issues.
+  </DocTile>
+</DocTiles>

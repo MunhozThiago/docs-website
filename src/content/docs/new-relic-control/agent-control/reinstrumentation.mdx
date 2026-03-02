@@ -1,10 +1,14 @@
 ---
-title: "Manage existing instrumentation with Agent Control"
-metaDescription: "You can reinstall your current instrumentation to manage it through Agent Control"
+title: "Migrate existing instrumentation"
+metaDescription: "How to migrate existing New Relic agents to be managed by Agent Control on Kubernetes, Linux, and Windows"
 freshnessValidatedDate: never
 ---
 <Callout variant="important">
   Agent Control and New Relic Control are now **generally available** for Kubernetes! Support for Linux hosts and Windows hosts is also in **public preview** program, pursuant to our [pre-release policies](/docs/licenses/license-information/referenced-policies/new-relic-pre-release-policy).
+</Callout>
+
+<Callout variant="caution" title="Is this the right page?">
+  This page is for environments where New Relic agents are **already running** and you want to bring them under Agent Control management. If you are setting up Agent Control for the first time on a clean environment, go to [Install Agent Control](/docs/new-relic-control/agent-control/setup/) instead.
 </Callout>
 
 ## Kubernetes migration
@@ -221,3 +225,26 @@ To migrate from a standalone Infrastructure Agent installation on Windows to Age
 4. **Recreate your agent configuration in Fleet Control.** After Agent Control is installed and connected, deploy the Infrastructure Agent through Fleet Control and apply your previous settings via a remote configuration. See [Windows configuration](/docs/new-relic-control/agent-control/configuration/#windows-configuration) for guidance on the configuration format.
 
 Custom dashboards and alerts referencing data from the Infrastructure Agent will continue to work as long as you use the same account and host name.
+
+<DocTiles>
+  <DocTile
+    title="Configuration reference"
+    path="/docs/new-relic-control/agent-control/configuration"
+  >
+    Configure agents locally or through Fleet Control remote configuration.
+  </DocTile>
+
+  <DocTile
+    title="Set up Fleet Control"
+    path="/docs/new-relic-control/fleet-control/setup"
+  >
+    Create fleets and deploy remote configurations to manage agents at scale.
+  </DocTile>
+
+  <DocTile
+    title="Upgrade agents"
+    path="/docs/new-relic-control/agent-control/upgrading"
+  >
+    Update Agent Control and managed agents through Fleet Control.
+  </DocTile>
+</DocTiles>

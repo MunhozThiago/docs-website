@@ -11,13 +11,7 @@ freshnessValidatedDate: never
 ---
 
 <Callout variant="important">
-  Agent Control and New Relic Control are now **generally available** for Kubernetes! Support for Linux and Windows hosts is also **available in public preview**, pursuant to our [pre-release policies](/docs/licenses/license-information/referenced-policies/new-relic-pre-release-policy).
-
-New Relic Control is an observability management solution that provides centralized, scalable control over agents and telemetry pipelines across your environment. This documentation covers the solution components, core functionality, and deployment options.
-
-  For a complete list of supported agents and their environments for Agent and Fleet Control, see our [agent type compatibility documentation](/docs/new-relic-control/agent-control/agent-types).
-
-  The public preview feature is provided pursuant to our [pre-release policies](/docs/licenses/license-information/referenced-policies/new-relic-pre-release-policy).
+  Agent Control and New Relic Control are now **generally available** for Kubernetes! Support for Linux and Windows hosts is also in **public preview**, pursuant to our [pre-release policies](/docs/licenses/license-information/referenced-policies/new-relic-pre-release-policy). For a complete list of supported agents and environments, see [Supported agent types](/docs/new-relic-control/agent-control/agent-types).
 </Callout>
 
 New Relic Control is an observability management solution that provides centralized, scalable control over agents and telemetry pipelines across your environment. This documentation covers the solution components, core functionality, and deployment options.
@@ -45,3 +39,35 @@ Pipeline Control is in general availability (GA) and can be used to manage data 
 - **Agent Control:** Requires the Authentication Domain Manager role to set up Agent Control and connect it to Fleet Control. For more information, refer to [User Management Concepts](/docs/accounts/accounts-billing/new-relic-one-user-management/user-management-concepts/#admin-settings).
 - **Fleet Control:** Requires the Organization Manager role (referred to as Administrative setting in the product) to create and edit fleets within Fleet Control.
 - **Pipeline Control:** Requires the Organization Manager role to set up and manage Pipeline Control gateway and Pipeline Control rules.
+
+## Next steps
+
+<DocTiles>
+  <DocTile
+    title="Install Agent Control"
+    path="/docs/new-relic-control/agent-control/setup"
+  >
+    Deploy Agent Control on Kubernetes, Linux, or Windows hosts using the guided install.
+  </DocTile>
+
+  <DocTile
+    title="Supported agent types"
+    path="/docs/new-relic-control/agent-control/agent-types"
+  >
+    Review which agents Agent Control can manage across Kubernetes, Linux, and Windows environments.
+  </DocTile>
+
+  <DocTile
+    title="Set up Fleet Control"
+    path="/docs/new-relic-control/fleet-control/setup"
+  >
+    Create fleets and deploy remote configurations to manage agents at scale.
+  </DocTile>
+
+  <DocTile
+    title="Set up Pipeline Control"
+    path="/docs/new-relic-control/pipeline-control/gateway/set-up-and-deploy-pipeline-control"
+  >
+    Filter and route telemetry data before it reaches New Relic ingestion.
+  </DocTile>
+</DocTiles>
