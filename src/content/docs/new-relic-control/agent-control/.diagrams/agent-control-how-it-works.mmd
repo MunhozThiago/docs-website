@@ -1,0 +1,13 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#005F8E', 'primaryTextColor': '#fff', 'primaryBorderColor': '#003d5c', 'lineColor': '#005F8E'}}}%%
+flowchart LR
+    A["1️⃣ Install\nAgent Control\n(once per cluster/host)"]
+    B["2️⃣ Connect\nto Fleet Control\n(automatic via OpAMP)"]
+    C["3️⃣ Deploy agents\nfrom Fleet Control UI\n(Infra · NRDOT · Fluent Bit…)"]
+    D["4️⃣ Manage\nfrom Fleet Control\n(upgrade · configure · monitor)"]
+
+    A --> B --> C --> D
+
+    style A fill:#005F8E,color:#fff,stroke:#003d5c
+    style B fill:#005F8E,color:#fff,stroke:#003d5c
+    style C fill:#005F8E,color:#fff,stroke:#003d5c
+    style D fill:#1dcf8b,color:#000,stroke:#12a870

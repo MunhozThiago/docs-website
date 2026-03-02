@@ -14,31 +14,156 @@ freshnessValidatedDate: never
   Agent Control and New Relic Control are now **generally available** for Kubernetes! Support for Linux and Windows hosts is also in **public preview**, pursuant to our [pre-release policies](/docs/licenses/license-information/referenced-policies/new-relic-pre-release-policy). For a complete list of supported agents and environments, see [Supported agent types](/docs/new-relic-control/agent-control/agent-types).
 </Callout>
 
-New Relic Control is an observability management solution that provides centralized, scalable control over agents and telemetry pipelines across your environment. This documentation covers the solution components, core functionality, and deployment options.
+New Relic Control is an observability management platform that gives you centralized, scalable control over your instrumentation agents and telemetry pipelines — from a single UI, across every environment you operate.
+
+## Why New Relic Control?
+
+As environments grow, the gap between the observability you want and the observability you have tends to widen. Agents drift out of date. Configurations diverge between clusters. A single change to a license key or agent version requires touching hundreds of machines. Teams spend more time managing instrumentation than using it.
+
+New Relic Control closes that gap. It provides a single place to deploy, configure, upgrade, and monitor your entire instrumentation footprint — without SSH access, custom scripts, or per-host automation.
 
 ## Components
-- **[Agent Control](/docs/new-relic-control/agent-control/overview):** A lightweight supervisor component that manages other New Relic and New Relic distribution of OpenTelemetry agents. It communicates with Fleet Control to remotely configure, update, and monitor the health of infrastructure-level instrumentation.
-- **[Fleet Control](/docs/new-relic-control/fleet-control/overview):** A centralized interface that provides visibility and remote management of all supervised agents across your infrastructure. It enables teams to install, configure, monitor, and upgrade agents at scale. 
-- **[Pipeline Control](/docs/new-relic-control/pipeline-control/overview):** The data management component of New Relic Control that helps filter and discard low-value data prior to database ingestion.  
 
-## Scope
-Agent Control and Fleet are in general availability (GA) for Kubernetes. At this stage, they support configuration management of infrastructure-level instrumentation for Kubernetes clusters, including:
-- **New Relic agents:** Includes agents based on the New Relic infrastructure agent and the New Relic distribution of OpenTelemetry (NRDOT) collector.
-- **Standards-based instrumentation:** Includes Prometheus and Fluent Bit.
+<img
+  title="New Relic Control components"
+  alt="Diagram showing the three New Relic Control components: Agent Control (on-host supervisor), Fleet Control (centralized management UI), and Pipeline Control (data filtering gateway)"
+  src="/images/new-relic-control-components.webp"
+/>
 
-Linux and Windows host support is in public preview. Please see the documentation for hosts for information on available features.
+{/* TODO: create diagram at /static/images/new-relic-control-components.webp
+    Mermaid source:
+    flowchart TB
+        subgraph NRC["New Relic Control"]
+            direction LR
+            FC["Fleet Control\nCentralized management UI\nfor all Agent Control deployments"]
+            PC["Pipeline Control\nData filtering gateway\nbefore New Relic ingest"]
+        end
 
-Pipeline Control is in general availability (GA) and can be used to manage data from APM agents by dropping low-value data. For details on supported agents, refer to [Supported agent versions](/docs/new-relic-control/pipeline-control/modify-agent-configuration/#supported-agent-versions)
+        subgraph Env1["Kubernetes Cluster"]
+            AC1["Agent Control\n(Supervisor)"]
+            A1["Infrastructure\nNRDOT / Fluent Bit\nPrometheus / eBPF"]
+            AC1 --> A1
+        end
 
-## Key behaviors
-- **Starts without agents:** Agent Control installs as a lightweight supervisor with no managed agents by default. You define which agents to deploy via Fleet Control after installation — nothing is automatically instrumented.
-- **Remote install and upgrade on Linux:** On Linux hosts, you can install, configure, and upgrade agents entirely through Fleet Control remote configuration, without touching individual hosts.
-- **No automatic agent migration:** Agent Control does not automatically migrate existing agent installations. If you already have agents running on a host or cluster, you must uninstall them first, then deploy them through Fleet Control. See [Manage existing instrumentation](/docs/new-relic-control/agent-control/reinstrumentation) for the migration process.
+        subgraph Env2["Linux Hosts"]
+            AC2["Agent Control\n(Supervisor)"]
+            A2["Infrastructure\nNRDOT"]
+            AC2 --> A2
+        end
+
+        subgraph Env3["Windows Hosts"]
+            AC3["Agent Control\n(Supervisor)"]
+            A3["Infrastructure\nNRDOT (experimental)"]
+            AC3 --> A3
+        end
+
+        FC <-->|"OpAMP / HTTPS"| AC1
+        FC <-->|"OpAMP / HTTPS"| AC2
+        FC <-->|"OpAMP / HTTPS"| AC3
+
+        A1 & A2 & A3 -->|"Metrics, Logs, Traces"| PC
+        PC -->|"filtered telemetry"| NR["New Relic Platform"]
+        A1 & A2 & A3 -.->|"(or direct ingest)"| NR
+*/}
+
+New Relic Control has three components, each addressing a distinct part of the observability management challenge:
+
+<CollapserGroup>
+  <Collapser id="agent-control" title="Agent Control — on-host supervisor">
+    **Agent Control** is a lightweight supervisor process you install once per Kubernetes cluster or host. It connects to Fleet Control and handles everything from there: deploying agents, applying configurations, performing rolling upgrades, and continuously monitoring health.
+
+    Agent Control supports:
+    - **Kubernetes** (GA): Infrastructure Agent, NRDOT, Fluent Bit, Prometheus, eBPF
+    - **Linux hosts** (Public Preview): Infrastructure Agent, NRDOT
+    - **Windows hosts** (Public Preview): Infrastructure Agent, NRDOT (experimental)
+
+    Agent Control does not collect or send telemetry itself — it only manages the agents that do. There is no additional ingest cost for the supervisor.
+
+    [Learn more about Agent Control →](/docs/new-relic-control/agent-control/overview)
+  </Collapser>
+
+  <Collapser id="fleet-control" title="Fleet Control — centralized management UI">
+    **Fleet Control** is the New Relic UI where you manage your entire Agent Control deployment. From Fleet Control you can:
+
+    - Organize clusters and hosts into **fleets** (logical groups with a shared configuration)
+    - Deploy agents to all members of a fleet with a single configuration change
+    - Monitor the health of every agent across every environment from one dashboard
+    - Roll out upgrades incrementally and roll back if needed
+
+    Fleet Control is the source of truth for your agent configuration. When you change a setting in Fleet Control, Agent Control on every affected machine converges to the new state automatically.
+
+    [Learn more about Fleet Control →](/docs/new-relic-control/fleet-control/overview)
+  </Collapser>
+
+  <Collapser id="pipeline-control" title="Pipeline Control — data filtering gateway">
+    **Pipeline Control** is a data management layer that sits between your agents and New Relic's ingest endpoint. It lets you define rules to filter and discard low-value telemetry — noisy metrics, redundant logs, high-frequency events — before that data reaches the database and drives up ingest costs.
+
+    Pipeline Control is in **general availability (GA)** and works with APM agents. It operates independently of Agent Control — you can use either component without the other.
+
+    [Learn more about Pipeline Control →](/docs/new-relic-control/pipeline-control/overview)
+  </Collapser>
+</CollapserGroup>
+
+## How the components work together
+
+<img
+  title="New Relic Control end-to-end data flow"
+  alt="Diagram showing the end-to-end flow from Fleet Control sending desired state to Agent Control, agents collecting telemetry, Pipeline Control filtering it, and data arriving in New Relic"
+  src="/images/new-relic-control-data-flow.webp"
+/>
+
+{/* TODO: create diagram at /static/images/new-relic-control-data-flow.webp
+    Mermaid source:
+    sequenceDiagram
+        participant User as You (New Relic UI)
+        participant FC as Fleet Control
+        participant AC as Agent Control
+        participant Agent as Managed Agent
+        participant PC as Pipeline Control
+        participant NR as New Relic Platform
+
+        User->>FC: Define desired state\n(agents, versions, config)
+        FC->>AC: Send desired state (OpAMP)
+        AC->>Agent: Deploy / configure / upgrade
+        Agent->>Agent: Collect telemetry
+        AC->>FC: Report health status
+        Agent->>PC: Send telemetry (optional)
+        PC->>PC: Apply filter rules
+        PC->>NR: Deliver filtered telemetry
+        Agent-->>NR: (or send directly)
+*/}
+
+A typical workflow looks like this:
+
+1. **You define the desired state in Fleet Control** — which agents to run, which version, and how they should be configured.
+2. **Fleet Control sends that desired state to Agent Control** on each cluster or host via an encrypted, outbound connection.
+3. **Agent Control converges your environment** to the desired state — installing, upgrading, or reconfiguring agents as needed.
+4. **Agents collect and send telemetry** to New Relic (optionally routed through Pipeline Control for filtering).
+5. **Agent Control continuously reports health** back to Fleet Control, so you always have an up-to-date view of your fleet.
+
+## Scope and availability
+
+| Component | GA / Preview | What it manages |
+| :--- | :--- | :--- |
+| **Agent Control + Fleet Control** (Kubernetes) | ✅ Generally Available | Infrastructure Agent, NRDOT, Fluent Bit, Prometheus, eBPF |
+| **Agent Control + Fleet Control** (Linux hosts) | Public Preview | Infrastructure Agent, NRDOT |
+| **Agent Control + Fleet Control** (Windows hosts) | Public Preview | Infrastructure Agent, NRDOT (experimental) |
+| **Pipeline Control** | ✅ Generally Available | APM agent telemetry (filter before ingest) |
 
 ## Required permissions
-- **Agent Control:** Requires the Authentication Domain Manager role to set up Agent Control and connect it to Fleet Control. For more information, refer to [User Management Concepts](/docs/accounts/accounts-billing/new-relic-one-user-management/user-management-concepts/#admin-settings).
-- **Fleet Control:** Requires the Organization Manager role (referred to as Administrative setting in the product) to create and edit fleets within Fleet Control.
-- **Pipeline Control:** Requires the Organization Manager role to set up and manage Pipeline Control gateway and Pipeline Control rules.
+
+| Component | Permission required |
+| :--- | :--- |
+| **Agent Control** | [Authentication Domain Manager](https://docs.newrelic.com/docs/accounts/accounts-billing/new-relic-one-user-management/user-management-concepts/#admin-settings) role |
+| **Fleet Control** | Organization Manager role (Administrative setting in the product) |
+| **Pipeline Control** | Organization Manager role |
+
+## Key behaviors to know before you start
+
+- **Agent Control starts empty.** No agents are deployed when you install the supervisor. You define what to deploy through Fleet Control after installation.
+- **Remote configuration wins.** When both local and remote configuration exist, Fleet Control's remote configuration always takes precedence and overrides local values.
+- **No automatic migration.** If agents are already running on a cluster or host, you must uninstall them before installing Agent Control. See [Migrate existing instrumentation](/docs/new-relic-control/agent-control/reinstrumentation).
+- **Fleet types matter.** Each environment type (Kubernetes, Linux, Windows) requires a fleet of the matching type. Mixing types causes failures.
 
 ## Next steps
 

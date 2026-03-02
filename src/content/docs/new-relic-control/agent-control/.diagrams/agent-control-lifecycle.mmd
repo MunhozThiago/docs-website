@@ -1,0 +1,25 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#005F8E', 'primaryTextColor': '#fff', 'primaryBorderColor': '#003d5c', 'lineColor': '#666'}}}%%
+sequenceDiagram
+    participant FC as Fleet Control
+    participant AC as Agent Control
+    participant Agent as Managed Agent
+
+    Note over FC,Agent: Initial deployment
+    FC->>AC: Desired state (version X + config)
+    AC->>AC: No agent running — install required
+    AC->>Agent: Install and start agent
+    Agent-->>AC: Health check: healthy
+    AC-->>FC: Status: healthy, version X
+
+    Note over FC,Agent: Upgrade
+    FC->>AC: New desired state (version Y)
+    AC->>AC: Running version X ≠ desired Y
+    AC->>Agent: Rolling upgrade to version Y
+    Agent-->>AC: Health check: healthy
+    AC-->>FC: Status: healthy, version Y
+
+    Note over FC,Agent: Continuous reconciliation
+    FC->>AC: Config update (new setting)
+    AC->>Agent: Apply config change
+    Agent-->>AC: Health check: healthy
+    AC-->>FC: Status: config applied

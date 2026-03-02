@@ -1,0 +1,31 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#005F8E', 'primaryTextColor': '#fff', 'primaryBorderColor': '#003d5c', 'lineColor': '#666'}}}%%
+flowchart LR
+    subgraph Cloud["☁️ New Relic Control (cloud)"]
+        FC["Fleet Control\n(UI + Backend)"]
+    end
+
+    subgraph K8S["🐳 Kubernetes Cluster"]
+        AC["Agent Control\n(newrelic-agent-control ns)"]
+
+        subgraph Flux["Flux Controllers"]
+            HC["Helm Controller"]
+            SC["Source Controller"]
+        end
+
+        subgraph Agents["Managed Agents (newrelic ns)"]
+            IA["Infrastructure"]
+            OT["NRDOT"]
+            FB["Fluent Bit"]
+            PR["Prometheus"]
+        end
+    end
+
+    FC -->|"① desired state\n(OpAMP / HTTPS)"| AC
+    AC -->|"② HelmRelease\nHelmRepository CRDs"| Flux
+    Flux -->|"③ helm install / upgrade"| Agents
+    Agents -->|"④ health status"| AC
+    AC -->|"⑤ status report"| FC
+
+    style Cloud fill:#e8f4f8,stroke:#005F8E
+    style K8S fill:#f5f5f5,stroke:#999
+    style Flux fill:#fff8e1,stroke:#f0b400

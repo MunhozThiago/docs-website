@@ -1,0 +1,27 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#005F8E', 'primaryTextColor': '#fff', 'primaryBorderColor': '#003d5c', 'lineColor': '#666'}}}%%
+flowchart LR
+    subgraph Cloud["☁️ New Relic Control (cloud)"]
+        FC["Fleet Control\n(UI + Backend)"]
+        OCI["OCI Package\nRegistry\n(agent packages)"]
+    end
+
+    subgraph Host["🖥️ Linux / Windows Host"]
+        AC["Agent Control\n(system service)"]
+        CFG["Rendered config\n(config.yaml /\nlocal_config.yaml)"]
+
+        subgraph Processes["Managed Agent Processes"]
+            IA["Infrastructure Agent\n(newrelic-infra)"]
+            OT["NRDOT Collector\n(nr-otel-collector)"]
+        end
+    end
+
+    FC -->|"① desired state\n(OpAMP / HTTPS)"| AC
+    OCI -->|"② download\nagent package"| AC
+    AC -->|"③ write\nrendered config"| CFG
+    AC -->|"③ start /\nsupervise"| Processes
+    CFG --> Processes
+    Processes -->|"④ health check"| AC
+    AC -->|"⑤ status report"| FC
+
+    style Cloud fill:#e8f4f8,stroke:#005F8E
+    style Host fill:#f5f5f5,stroke:#999

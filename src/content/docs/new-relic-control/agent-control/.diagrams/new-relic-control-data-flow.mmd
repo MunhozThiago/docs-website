@@ -1,0 +1,19 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#005F8E', 'primaryTextColor': '#fff', 'primaryBorderColor': '#003d5c', 'lineColor': '#666'}}}%%
+sequenceDiagram
+    actor User as You (New Relic UI)
+    participant FC as Fleet Control
+    participant AC as Agent Control
+    participant Agent as Managed Agent
+    participant PC as Pipeline Control
+    participant NR as New Relic Platform
+
+    User->>FC: Define desired state (agents, versions, config)
+    FC->>AC: Send desired state via OpAMP
+    AC->>Agent: Deploy / configure / upgrade
+    Note over AC,Agent: Rolling update with health checks
+    Agent->>Agent: Collect telemetry
+    AC->>FC: Report health status
+    Agent->>PC: Send telemetry (optional)
+    PC->>PC: Apply filter rules
+    PC->>NR: Deliver filtered telemetry
+    Agent-->>NR: (or send directly without Pipeline Control)

@@ -1,0 +1,18 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#005F8E', 'primaryTextColor': '#fff', 'primaryBorderColor': '#003d5c', 'lineColor': '#666'}}}%%
+flowchart TD
+    FC["🌐 Fleet Control\nRemote Configuration\n(authoritative — highest priority)"]
+    Local["📄 Local config.yaml / values.yaml\n(fallback — used if no remote config)"]
+    Vault["🔐 Secrets providers\n(HashiCorp Vault / Kubernetes Secrets)"]
+    AC["⚙️ Agent Control\n(merges and renders final config)"]
+    Agent["📦 Managed Agent\n(receives final rendered config)"]
+
+    FC -->|"overrides local settings"| AC
+    Local -->|"provides fallback values"| AC
+    Vault -->|"secrets injected at runtime\nnever stored in config files"| AC
+    AC -->|"final config applied"| Agent
+
+    style FC fill:#1dcf8b,color:#000,stroke:#12a870
+    style Local fill:#8faee0,color:#000,stroke:#6b8fc4
+    style Vault fill:#f0b400,color:#000,stroke:#c49200
+    style AC fill:#005F8E,color:#fff,stroke:#003d5c
+    style Agent fill:#f5f5f5,color:#333,stroke:#ccc

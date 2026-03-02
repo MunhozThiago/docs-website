@@ -1,0 +1,33 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#005F8E', 'primaryTextColor': '#fff', 'primaryBorderColor': '#003d5c', 'lineColor': '#666', 'secondaryColor': '#1dcf8b', 'tertiaryColor': '#f5f5f5'}}}%%
+flowchart TB
+    subgraph NRC["New Relic Control (cloud)"]
+        direction LR
+        FC["Fleet Control\nCentralized management UI\nfor all Agent Control deployments"]
+        PC["Pipeline Control\nData filtering gateway\nbefore New Relic ingest"]
+    end
+
+    subgraph Env1["Kubernetes Cluster"]
+        AC1["Agent Control\n(Supervisor)"]
+        A1["Infrastructure · NRDOT\nFluent Bit · Prometheus · eBPF"]
+        AC1 --> A1
+    end
+
+    subgraph Env2["Linux Hosts"]
+        AC2["Agent Control\n(Supervisor)"]
+        A2["Infrastructure · NRDOT"]
+        AC2 --> A2
+    end
+
+    subgraph Env3["Windows Hosts"]
+        AC3["Agent Control\n(Supervisor)"]
+        A3["Infrastructure · NRDOT"]
+        AC3 --> A3
+    end
+
+    FC <-->|"OpAMP / HTTPS"| AC1
+    FC <-->|"OpAMP / HTTPS"| AC2
+    FC <-->|"OpAMP / HTTPS"| AC3
+
+    A1 & A2 & A3 -->|"Metrics, Logs, Traces"| PC
+    PC -->|"filtered telemetry"| NR["New Relic Platform"]
+    A1 & A2 & A3 -.->|"direct ingest\n(optional)"| NR
