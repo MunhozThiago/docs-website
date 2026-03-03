@@ -232,6 +232,10 @@ On Linux and Windows, Agent Control operates without Kubernetes or Flux. The sup
         AC -->|"5 status report"| FC
 */}
 
+<Callout variant="tip" title="Adapting Agent Control to your infrastructure">
+  The architectures above describe the standard deployment, which is recommended for most environments. If you have specific constraints — such as an existing Flux CD installation or strict change management requirements — Agent Control can be configured to accommodate them. See [Deployment configurations](/docs/new-relic-control/agent-control/deployment-configurations) for available options, their implications, and how to set them up.
+</Callout>
+
 ## Agent Control permissions
 
 Agent Control is designed to perform powerful lifecycle actions within your environment. Understanding what it needs and why is important before deploying.
@@ -245,7 +249,7 @@ Agent Control and Flux have separate, well-scoped permission sets:
 | **Agent Control** | Create, read, update, delete `HelmRelease` and `HelmRepository` Flux CRDs | Instructs Flux what agents to deploy, without needing cluster-admin rights |
 | **Flux** | Create `Deployments`, `DaemonSets`, `Services`, `ConfigMaps`, `Secrets`, and other Kubernetes resources | Deploys and manages the actual agent pods on behalf of Agent Control |
 
-Flux requires elevated permissions (typically `cluster-admin`) because it needs to create and update arbitrary Kubernetes resources in behalf of the user. If your security policy requires a least-privilege Flux setup, see [Using an existing Flux installation](/docs/new-relic-control/agent-control/setup/#existing-flux) for a custom `ClusterRole` example.
+Flux requires elevated permissions (typically `cluster-admin`) because it needs to create and update arbitrary Kubernetes resources on behalf of the user. If your security policy requires a least-privilege Flux setup, see [Custom Flux deployment configuration](/docs/new-relic-control/agent-control/deployment-configurations/#custom-flux) for a `ClusterRole` example.
 
 ### Linux and Windows hosts
 

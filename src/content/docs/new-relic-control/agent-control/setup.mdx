@@ -92,114 +92,16 @@ Verify your environment meets the requirements for Agent Control. For detailed r
   </Step>
 </Steps>
 
-<CollapserGroup>
-  <Collapser id="existing-flux" title="Using an existing Flux installation">
-    By default, the Agent Control Helm chart uses an embedded instance of [Flux CD](https://fluxcd.io/) to manage the lifecycle of agents in Kubernetes. If your organization already uses **Flux v2** for GitOps, you can configure Agent Control to use your existing installation instead.
+<Callout variant="tip" title="Already using Flux CD?">
+  If your organization already runs Flux v2, you can configure Agent Control to use your existing installation instead of the embedded one. In your `values.yaml`, set:
 
-    #### Requirements
+  ```yaml
+  agentControlCd:
+    enabled: false
+  ```
 
-    Your existing Flux installation must meet these requirements:
-    - **Flux v2** or higher
-    - **Helm Controller** with the `HelmRelease` CRD (`helm.toolkit.fluxcd.io/v2`)
-    - **Source Controller** with the `HelmRepository` CRD (`source.toolkit.fluxcd.io/v1`)
-    - Configured to watch the namespace where Agent Control will be installed (or all namespaces)
-
-    #### Configuration
-
-    In your `values.yaml`, disable the bundled Flux components:
-
-    ```yaml
-    global:
-      cluster: "<YOUR_CLUSTER_NAME>"
-      licenseKey: "<YOUR_LICENSE_KEY>"
-
-    # Disable the embedded Flux instance
-    agentControlCd:
-      enabled: false
-
-    agentControlDeployment:
-      chartValues:
-        # ... other configurations ...
-    ```
-
-    #### Permissions for external Flux
-
-    Your existing Flux Service Account needs permissions to deploy New Relic resources. Choose one of:
-
-    - **Cluster Admin (recommended):** Ensure your Flux instance runs with `cluster-admin` privileges — the standard for the Flux community chart.
-    - **Least Privilege:** Create a specific `ClusterRole` with the minimum permissions. Below is an example:
-
-    ```yaml
-    apiVersion: rbac.authorization.k8s.io/v1
-    kind: ClusterRole
-    metadata:
-      name: external-flux-agent-control-role
-    rules:
-      # Permissions required by Flux to operate Agent Control components
-      - apiGroups: ["apiextensions.k8s.io"]
-        resources: ["customresourcedefinitions"]
-        verbs: ["get"]
-      - apiGroups: ["coordination.k8s.io"]
-        resources: ["leases"]
-        verbs: ["get", "create", "update"]
-      - apiGroups: ["rbac.authorization.k8s.io"]
-        resources: ["clusterroles", "rolebindings"]
-        verbs: ["get", "create", "delete"]
-      - apiGroups: [""]
-        resources: ["configmaps"]
-        verbs: ["watch"]
-      - apiGroups: [""]
-        resources: ["events"]
-        verbs: ["create", "patch"]
-      - apiGroups: [""]
-        resources: ["namespaces"]
-        verbs: ["create"]
-      - apiGroups: [""]
-        resources: ["serviceaccounts"]
-        verbs: ["get", "create", "delete"]
-      - apiGroups: [""]
-        resources: ["services"]
-        verbs: ["get", "create"]
-      - apiGroups: ["apps"]
-        resources: ["deployments"]
-        verbs: ["create"]
-      - apiGroups: ["autoscaling"]
-        resources: ["horizontalpodautoscalers"]
-        verbs: ["get", "create"]
-      - apiGroups: ["batch"]
-        resources: ["jobs"]
-        verbs: ["get", "list", "watch", "create", "delete"]
-
-      # Permissions required by Agent Control logic
-      - apiGroups: ["helm.toolkit.fluxcd.io", "newrelic.com", "source.toolkit.fluxcd.io"]
-        resources: ["*"]
-        verbs: ["*"]
-      - apiGroups: [""]
-        resources: ["secrets"]
-        verbs: ["*"]
-      - apiGroups: [""]
-        resources: ["configmaps"]
-        verbs: ["get", "list", "create", "patch", "update", "delete", "deletecollection"]
-      - apiGroups: [""]
-        resources: ["namespaces"]
-        verbs: ["get"]
-      - apiGroups: ["apps"]
-        resources: ["daemonsets", "deployments", "statefulsets"]
-        verbs: ["get", "list", "watch"]
-    ```
-
-    <Callout variant="important">
-      Agent permissions may change as new features or agents are added. You are responsible for maintaining these permissions in your custom role.
-    </Callout>
-
-    #### Support boundaries
-
-    When using an external Flux installation, New Relic support covers Agent Control software only (generating valid configuration manifests). Shared responsibilities:
-
-    - **New Relic:** Ensures Agent Control correctly interacts with the New Relic backend and generates valid `HelmRelease` and `HelmRepository` definitions.
-    - **You:** Responsible for the health, version maintenance, networking, and troubleshooting of your own Flux installation.
-  </Collapser>
-</CollapserGroup>
+  For full requirements, Service Account permissions, support responsibilities, and trade-offs, see [Custom Flux deployment configuration](/docs/new-relic-control/agent-control/deployment-configurations/#custom-flux).
+</Callout>
 
     </TabsPageItem>
 

@@ -9,6 +9,8 @@ pages:
         path: /docs/new-relic-control/agent-control/overview
       - title: Install Agent Control
         path: /docs/new-relic-control/agent-control/setup
+      - title: Deployment configurations
+        path: /docs/new-relic-control/agent-control/deployment-configurations
       - title: Supported agent types
         path: /docs/new-relic-control/agent-control/agent-types
       - title: Migrate existing instrumentation

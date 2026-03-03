@@ -1,0 +1,265 @@
+---
+title: "Deployment configurations"
+metaDescription: "Understand the available Agent Control deployment configurations — from the standard full-management setup to integrating with an existing Flux CD installation — and learn the trade-offs of each."
+freshnessValidatedDate: never
+---
+
+<Callout variant="important">
+  Agent Control and New Relic Control are **generally available** for Kubernetes. Support for Linux and Windows hosts is in **public preview** program, pursuant to our [pre-release policies](/docs/licenses/license-information/referenced-policies/new-relic-pre-release-policy).
+</Callout>
+
+Agent Control is designed to be installed and used as shipped. The standard deployment gives you the complete management experience with no additional configuration: Agent Control installs agents, keeps them running at the correct version, applies configuration from Fleet Control, and continuously reports health.
+
+Some organizations have existing infrastructure or operational constraints — such as an already-running Flux CD installation, or strict change management requirements — that call for a different approach. This page describes the available deployment configurations, when to use each one, and what trade-offs each involves.
+
+## Compare configurations
+
+| | Standard | Custom Flux |
+| :--- | :---: | :---: |
+| **Agent lifecycle** (install, upgrade, restart) | ✅ Agent Control | ✅ Your Flux |
+| **Configuration management** | ✅ | ✅ |
+| **Health reporting to Fleet Control** | ✅ | ✅ |
+| Kubernetes | ✅ GA | ✅ GA |
+| Linux hosts | ✅ Public Preview | — |
+| Windows hosts | ✅ Public Preview | — |
+
+<Callout variant="tip">
+  Not sure which to use? Start with the **Standard** configuration. You can switch to a custom Flux configuration later without reinstalling Agent Control.
+</Callout>
+
+---
+
+## Standard deployment [#standard]
+
+**Recommended for most environments.**
+
+In the standard configuration, Agent Control is the single point of control for your entire agent fleet. It handles everything: installing agents when you define them in Fleet Control, reconciling configuration changes, performing rolling upgrades, restarting unhealthy agents, and reporting status.
+
+### What Agent Control manages
+
+| Capability | Description |
+| :--- | :--- |
+| **Lifecycle** | Installs, upgrades, and restarts agents based on Fleet Control desired state |
+| **Configuration** | Merges Fleet Control remote config with local config files; remote config always takes precedence |
+| **Health monitoring** | Continuously checks agent status and reports it to Fleet Control. Local `/status` endpoint available for direct checks |
+
+### How agent delivery works
+
+The delivery mechanism varies by environment:
+
+- **Kubernetes:** Agent Control embeds a [Flux CD](https://fluxcd.io/) instance that manages agents using `HelmRelease` and `HelmRepository` Kubernetes CRDs. Agents are Helm charts deployed through this Flux instance.
+- **Linux and Windows hosts:** Agents are distributed as OCI-compatible packages. Agent Control downloads, installs, and supervises them as system services.
+
+### Get started
+
+Follow the [Install Agent Control](/docs/new-relic-control/agent-control/setup) guide for step-by-step instructions for your environment.
+
+---
+
+## Custom Flux installation (Kubernetes only) [#custom-flux]
+
+**For organizations already running Flux CD for GitOps.**
+
+By default, Agent Control on Kubernetes bundles its own Flux CD instance to manage agent lifecycle. If your organization already operates Flux v2, you can configure Agent Control to use your existing installation instead of running a second one.
+
+### What changes
+
+With a custom Flux configuration:
+
+- Agent Control continues to handle Fleet Control connectivity, receive desired state updates via OpAMP, and generate the `HelmRelease` and `HelmRepository` manifests that define what agents to run.
+- **Your** Flux instance reads those manifests and performs the actual `helm install` and `helm upgrade` operations on your cluster.
+- The embedded Flux components (`agentControlCd`) are disabled in the Agent Control Helm chart.
+
+From a Fleet Control perspective, the experience is identical — you still manage agents from the Fleet Control UI and Agent Control still reports health. The difference is entirely internal to your cluster.
+
+<img
+  title="Agent Control with custom Flux"
+  alt="Diagram showing Agent Control generating HelmRelease manifests and a customer-managed Flux instance applying them to the cluster"
+  src="/images/agent-control-k8s-architecture.webp"
+/>
+
+{/* TODO: create diagram at /static/images/agent-control-k8s-architecture.webp
+    Mermaid source: .diagrams/agent-control-k8s-architecture.mmd */}
+
+### Requirements
+
+Your existing Flux installation must meet these requirements before configuring Agent Control to use it:
+
+- **Flux v2** or higher
+- **Helm Controller** with the `HelmRelease` CRD (`helm.toolkit.fluxcd.io/v2`)
+- **Source Controller** with the `HelmRepository` CRD (`source.toolkit.fluxcd.io/v1`)
+- Configured to watch the namespace where Agent Control is installed (or all namespaces)
+
+### Configuration
+
+In your `values.yaml`, disable the embedded Flux components:
+
+```yaml
+global:
+  cluster: "<YOUR_CLUSTER_NAME>"
+  licenseKey: "<YOUR_LICENSE_KEY>"
+
+# Disable the embedded Flux instance
+agentControlCd:
+  enabled: false
+
+agentControlDeployment:
+  chartValues:
+    # ... other configurations ...
+```
+
+### Flux Service Account permissions
+
+Your existing Flux Service Account needs permissions to deploy New Relic resources. Choose one of the following:
+
+- **Cluster Admin (recommended):** Ensure your Flux instance has `cluster-admin` privileges — the standard for the Flux community Helm chart.
+- **Least Privilege:** Create a `ClusterRole` with the specific permissions required:
+
+<CollapserGroup>
+  <Collapser id="flux-clusterrole" title="Least-privilege ClusterRole for external Flux">
+    ```yaml
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRole
+    metadata:
+      name: external-flux-agent-control-role
+    rules:
+      # Permissions required by Flux to operate Agent Control components
+      - apiGroups: ["apiextensions.k8s.io"]
+        resources: ["customresourcedefinitions"]
+        verbs: ["get"]
+      - apiGroups: ["coordination.k8s.io"]
+        resources: ["leases"]
+        verbs: ["get", "create", "update"]
+      - apiGroups: ["rbac.authorization.k8s.io"]
+        resources: ["clusterroles", "rolebindings"]
+        verbs: ["get", "create", "delete"]
+      - apiGroups: [""]
+        resources: ["configmaps"]
+        verbs: ["watch"]
+      - apiGroups: [""]
+        resources: ["events"]
+        verbs: ["create", "patch"]
+      - apiGroups: [""]
+        resources: ["namespaces"]
+        verbs: ["create"]
+      - apiGroups: [""]
+        resources: ["serviceaccounts"]
+        verbs: ["get", "create", "delete"]
+      - apiGroups: [""]
+        resources: ["services"]
+        verbs: ["get", "create"]
+      - apiGroups: ["apps"]
+        resources: ["deployments"]
+        verbs: ["create"]
+      - apiGroups: ["autoscaling"]
+        resources: ["horizontalpodautoscalers"]
+        verbs: ["get", "create"]
+      - apiGroups: ["batch"]
+        resources: ["jobs"]
+        verbs: ["get", "list", "watch", "create", "delete"]
+
+      # Permissions required by Agent Control logic
+      - apiGroups: ["helm.toolkit.fluxcd.io", "newrelic.com", "source.toolkit.fluxcd.io"]
+        resources: ["*"]
+        verbs: ["*"]
+      - apiGroups: [""]
+        resources: ["secrets"]
+        verbs: ["*"]
+      - apiGroups: [""]
+        resources: ["configmaps"]
+        verbs: ["get", "list", "create", "patch", "update", "delete", "deletecollection"]
+      - apiGroups: [""]
+        resources: ["namespaces"]
+        verbs: ["get"]
+      - apiGroups: ["apps"]
+        resources: ["daemonsets", "deployments", "statefulsets"]
+        verbs: ["get", "list", "watch"]
+    ```
+
+    <Callout variant="important">
+      These permissions may change as new features or agents are added. If agent deployments fail after upgrading Agent Control, review and update this `ClusterRole`.
+    </Callout>
+  </Collapser>
+</CollapserGroup>
+
+### Support responsibilities
+
+When using a custom Flux installation, New Relic support covers Agent Control software only.
+
+| | New Relic support | Your responsibility |
+| :--- | :---: | :---: |
+| Agent Control behavior and generated manifests | ✅ | — |
+| Fleet Control connectivity and remote config | ✅ | — |
+| Flux health, version, and networking | — | ✅ |
+| Flux Service Account permission maintenance | — | ✅ |
+
+### Trade-offs
+
+**Benefits:**
+- One fewer Flux instance running in your cluster
+- Leverages your existing Flux observability and GitOps workflows
+- Consistent operational experience for teams already familiar with Flux
+
+**Limitations:**
+- You are responsible for Flux health, upgrades, and networking
+- Permission mismatches after Agent Control updates can silently fail agent deployments — you must keep the `ClusterRole` up to date
+- New Relic support cannot diagnose issues originating from your Flux installation
+
+---
+
+## Planned configurations
+
+The following configurations are on the roadmap. They are not yet available.
+
+<Callout variant="caution">
+  The configurations below are not yet available. This section is provided for planning and evaluation purposes only.
+</Callout>
+
+### Configuration management only
+
+Agent Control handles configuration distribution from Fleet Control but does **not** manage agent lifecycle — no installation, upgrades, or restarts. You retain full control over how and when agents are installed using your existing tools (Ansible, Chef, Puppet, CI/CD pipelines, or manual processes).
+
+**Intended for:** Organizations with strict change management processes, immutable infrastructure patterns, or compliance requirements that prohibit automated software installation from an external service.
+
+| | Planned behavior |
+| :--- | :--- |
+| Agent lifecycle | ❌ Not managed by Agent Control |
+| Configuration | ✅ Pushed from Fleet Control |
+| Health reporting | ✅ |
+
+### Health visibility only
+
+Agent Control reports agent health and current configuration to Fleet Control but does **not** apply any remote changes. Fleet Control becomes a read-only visibility layer for your agent fleet.
+
+**Intended for:** Highly security-constrained environments where any remote write operation requires additional approval, or organizations evaluating Fleet Control as an inventory and observability tool before adopting full management.
+
+| | Planned behavior |
+| :--- | :--- |
+| Agent lifecycle | ❌ Not managed |
+| Configuration | ❌ Remote config not applied |
+| Health reporting | ✅ Read-only visibility in Fleet Control |
+
+---
+
+<DocTiles>
+  <DocTile
+    title="Install Agent Control"
+    path="/docs/new-relic-control/agent-control/setup"
+  >
+    Follow the guided install for Kubernetes, Linux, or Windows.
+  </DocTile>
+
+  <DocTile
+    title="Configuration reference"
+    path="/docs/new-relic-control/agent-control/configuration"
+  >
+    Explore all configuration options, including secrets management and proxy setup.
+  </DocTile>
+
+  <DocTile
+    title="Supported agent types"
+    path="/docs/new-relic-control/agent-control/agent-types"
+  >
+    Review which agents are supported across all environments.
+  </DocTile>
+</DocTiles>
