@@ -17,9 +17,9 @@ pages:
         path: /docs/new-relic-control/agent-control/reinstrumentation
       - title: Configuration reference
         path: /docs/new-relic-control/agent-control/configuration
-      - title: Upgrade agents
+      - title: Upgrades and lifecycle
         path: /docs/new-relic-control/agent-control/upgrading
-      - title: Monitor Agent Control
+      - title: Agent health and visibility
         path: /docs/new-relic-control/agent-control/monitoring
       - title: Troubleshooting
         path: /docs/new-relic-control/agent-control/troubleshooting

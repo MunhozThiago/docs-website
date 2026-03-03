@@ -1,6 +1,6 @@
 ---
-title: "Monitor Agent Control"
-metaDescription: "A guide on how to check the status and health of Agent Control and its managed agents across Kubernetes, Linux, and Windows environments."
+title: "Agent health and fleet visibility"
+metaDescription: "Understand the state of your agent fleet — what's running, at which version, and whether it's healthy — using Fleet Control and direct inspection commands on each cluster or host."
 freshnessValidatedDate: never
 ---
 
@@ -8,17 +8,19 @@ freshnessValidatedDate: never
   Agent Control and New Relic Control are now **generally available** for Kubernetes! Support for Linux hosts and Windows hosts is also in **public preview** program, pursuant to our [pre-release policies](/docs/licenses/license-information/referenced-policies/new-relic-pre-release-policy).
 </Callout>
 
-Agent Control acts as the on-cluster or on-host supervisor for your managed agents. Its primary role is to ensure agents are correctly deployed and running. This guide covers how to check the health of Agent Control itself and all the agents it manages.
+Agent Control gives you two levels of visibility into your instrumentation fleet:
 
-For a high-level view of your entire fleet's health, use the Fleet Control UI in New Relic. For in-depth troubleshooting or direct validation, perform checks directly on the host or cluster where Agent Control is running.
+- **Fleet Control UI** — Your primary tool for fleet-wide visibility. See what agents are running across every cluster and host in your fleet, the agent version in use on each, current health status, and the configuration they received — without connecting to individual machines. Navigate to **[Fleet Control](/docs/new-relic-control/fleet-control/overview)** in the New Relic UI to access the fleet health dashboard.
+
+- **Direct inspection commands** — For diagnosing a specific cluster or host, verifying that a configuration change was applied, or investigating an agent that appears unhealthy in Fleet Control. The commands in this page let you inspect the live state of Agent Control and every agent it manages, directly on the machine.
 
 <Callout variant="tip" title="Centralized monitoring (coming soon)">
-  New Relic Control will soon provide a centralized monitoring experience inside the New Relic UI, eliminating the need for manual `kubectl` or PowerShell commands. The centralized view will link directly to each agent's entity dashboard for seamless navigation from fleet health to deep-dive observability. This experience will be available for all supported environments.
+  New Relic Control will soon provide a centralized monitoring experience inside the New Relic UI, including direct links from fleet health status to each agent's entity dashboard. This experience will be available for all supported environments.
 </Callout>
 
 <!-- TODO: screenshot of Fleet Control fleet health overview showing agent status per fleet -->
 
-## Monitor Agent Control health
+## Check agent health
 
 <Tabs>
   <TabsBar>
@@ -223,9 +225,9 @@ The `/status` endpoint returns a JSON response with the health of the supervisor
   </Collapser>
 </CollapserGroup>
 
-## Monitor managed agents
+## Inspect individual agents
 
-After verifying that Agent Control is healthy, check the individual agents it manages.
+When Fleet Control shows an agent as unhealthy, at an unexpected version, or not receiving its configuration, use these commands to investigate directly on the affected cluster or host. The `/status` endpoint response (see [Status response structure](#status-response-structure) above) is your fastest way to see the running version and health of every agent in a single call.
 
 <Tabs>
   <TabsBar>
@@ -237,36 +239,75 @@ After verifying that Agent Control is healthy, check the individual agents it ma
   <TabsPages>
     <TabsPageItem id="agents-k8s">
 
-Inspect the HelmRelease resources that Flux manages for each agent:
+Inspect the HelmRelease resources that Flux manages for each agent. The `READY` column indicates whether Flux has successfully deployed the desired version.
 
 ```shell
+# List all managed agents with version and ready status
 kubectl get helmreleases -n newrelic
+
+# Detailed status for a specific agent — shows the chart version, last reconciliation, and any errors
 kubectl describe helmrelease <agent-name> -n newrelic
+```
+
+A `READY=False` status means Flux was unable to deploy or reconcile the release. The `describe` output includes the reconciliation error and last attempted action.
+
+```shell
+# Check that managed agent pods are running
+kubectl get pods -n newrelic
+
+# Tail agent pod logs for live diagnostics
+kubectl logs -f <agent-pod-name> -n newrelic
 ```
 
     </TabsPageItem>
 
     <TabsPageItem id="agents-linux">
 
-Each agent's health is reported in the `/status` endpoint under `agents[].status`. For deeper diagnostics, check the agent's own logs:
+The `/status` endpoint returns the running version and health status for every managed agent. This is the fastest way to verify what's actually installed and running, as opposed to what was requested.
+
+```bash
+curl localhost:51200/status
+```
+
+Look at the `agents[].agent_type` field to see the running version and `agents[].status` for its health. For deeper diagnostics when an agent is unhealthy, check the agent's own logs:
 
 ```bash
 # Infrastructure Agent
-tail -f /var/log/newrelic-infra/newrelic-infra.log
+sudo tail -f /var/log/newrelic-infra/newrelic-infra.log
 
 # NRDOT Collector
 journalctl -u nrdot -f
+```
+
+To verify the installed package version directly:
+
+```bash
+dpkg -l | grep newrelic-infra           # Debian, Ubuntu
+rpm -q newrelic-infra                   # Amazon Linux, CentOS, RHEL
+zypper se --installed-only newrelic     # SLES
 ```
 
     </TabsPageItem>
 
     <TabsPageItem id="agents-windows">
 
-Each agent's health is reported in the `/status` endpoint under `agents[].status`. For deeper diagnostics, check the agent's log files:
+The `/status` endpoint returns the running version and health status for every managed agent:
+
+```powershell
+Invoke-WebRequest -Uri "http://localhost:51200/status" -UseBasicParsing | Select-Object -ExpandProperty Content
+```
+
+Look at the `agents[].agent_type` field to see the running version and `agents[].status` for its health. For deeper diagnostics, check the agent's log files:
 
 ```powershell
 # Infrastructure Agent
 Get-Content "C:\ProgramData\New Relic\newrelic-infra\newrelic-infra.log" -Tail 50 -Wait
+```
+
+To verify the installed version directly:
+
+```powershell
+Get-WmiObject -Class Win32_Product | Where-Object { $_.Name -like "*New Relic Infrastructure*" } | Select-Object Name, Version
 ```
 
     </TabsPageItem>

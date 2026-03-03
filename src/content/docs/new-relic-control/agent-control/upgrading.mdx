@@ -1,6 +1,6 @@
 ---
-title: "Upgrade agents"
-metaDescription: "A simple, centralized process for updating agent versions across your entire fleet"
+title: "Upgrades and lifecycle management"
+metaDescription: "How to upgrade Agent Control itself and keep managed agent versions aligned across your fleet — with rollback instructions for every environment."
 freshnessValidatedDate: never
 ---
 
@@ -8,34 +8,18 @@ freshnessValidatedDate: never
   Agent Control and New Relic Control are now **generally available** for Kubernetes! Support for Linux hosts and Windows hosts is also in **public preview** program, pursuant to our [pre-release policies](/docs/licenses/license-information/referenced-policies/new-relic-pre-release-policy).
 </Callout>
 
-Agent Control provides a centralized way to manage the full lifecycle of your agents, including updates. Instead of manually updating agents on each host or cluster, you define your desired state in Fleet Control — Agent Control handles the rest automatically.
+This page covers two distinct upgrade concerns:
+
+- **Upgrade Agent Control itself** — Update the supervisor binary. Agent Control is a managed service with its own version and release cycle.
+- **Upgrade managed agents** — Update the agents Agent Control supervises (Infrastructure Agent, NRDOT, Fluent Bit, and others). This is done entirely through Fleet Control.
 
 <Callout variant="tip" title="Version compatibility">
   Agent Control is backward compatible with managed agent versions. You can upgrade Agent Control independently from your managed agents, and you can upgrade managed agents independently from each other. There is no required upgrade order.
 </Callout>
 
-## Upgrade managed agents
+## Upgrade Agent Control [#upgrade-agent-control]
 
-You can update any agent managed by Agent Control by changing its version in the fleet's remote configuration in Fleet Control. This declarative approach ensures consistency and reliability across your entire fleet.
-
-1. Navigate to the configuration for your fleet in Fleet Control.
-2. Locate the agent you want to update (for example, `infrastructure`) and change the `chart_version` value to the new version.
-3. Save and deploy the updated configuration.
-
-Agent Control automatically detects the change and performs a non-disruptive rolling update, ensuring new agents are running and healthy before replacing the old ones.
-
-### Example: Upgrade the infrastructure agent
-
-```yaml
-# Remote configuration for the infrastructure agent
-infrastructure:
-  chart_version: "5.0.110"  # Change this to the new version
-  chart_values:
-    newrelic-infrastructure:
-      enableProcessMetrics: true
-```
-
-## Upgrade Agent Control
+Agent Control is a managed service with its own version and release cycle. Upgrading it gives you new capabilities, bug fixes, and performance improvements while leaving your managed agents and their configurations untouched.
 
 <Tabs>
   <TabsBar>
@@ -47,9 +31,7 @@ infrastructure:
   <TabsPages>
     <TabsPageItem id="upgrade-k8s">
 
-Agent Control on Kubernetes can update itself remotely through Fleet Control, ensuring the supervisor on your cluster is always up to date.
-
-The process is the same as upgrading any managed agent: specify the new version in the Fleet Control configuration and deploy.
+On Kubernetes, Agent Control can update itself remotely through Fleet Control — no cluster access required. The process is the same as upgrading any managed agent.
 
 <Steps>
   <Step>
@@ -73,7 +55,7 @@ The process is the same as upgrading any managed agent: specify the new version 
 
 <CollapserGroup>
   <Collapser id="rollback-k8s" title="Rollback Agent Control on Kubernetes">
-    If a Kubernetes upgrade causes issues, set the `chart_version` back to the previous version in Fleet Control and redeploy.
+    If an upgrade causes issues, set the `chart_version` back to the previous version in Fleet Control and redeploy.
 
     Alternatively, use Helm directly:
 
@@ -121,8 +103,6 @@ Upgrade Agent Control on Linux using your distribution's package manager:
   </TabsPages>
 </Tabs>
 
-Managed agents (Infrastructure Agent, NRDOT) on Linux are upgraded through Fleet Control — update the desired agent version in your fleet configuration and deploy.
-
 <CollapserGroup>
   <Collapser id="rollback-linux" title="Rollback Agent Control on Linux">
     To roll back to a previous version, install the specific version explicitly:
@@ -154,7 +134,7 @@ Managed agents (Infrastructure Agent, NRDOT) on Linux are upgraded through Fleet
 
     <TabsPageItem id="upgrade-windows">
 
-Agent Control on Windows is upgraded by re-running the installation script provided in the guided install. The script downloads the latest version and replaces the existing executable while preserving your configuration files.
+Agent Control on Windows is upgraded by re-running the installation script provided in the guided install. The script downloads the new version and replaces the existing executable while preserving your configuration files.
 
 <Steps>
   <Step>
@@ -175,11 +155,9 @@ Agent Control on Windows is upgraded by re-running the installation script provi
   </Step>
 </Steps>
 
-Managed agents on Windows are upgraded through Fleet Control — update the desired agent version in your fleet configuration and deploy.
-
 <CollapserGroup>
   <Collapser id="rollback-windows" title="Rollback Agent Control on Windows">
-    To roll back Agent Control on Windows, re-run the installation script for the previous version from the guided install. The script replaces the current executable while preserving your configuration files.
+    To roll back, re-run the installation script for the previous version from the guided install. The script replaces the current executable while preserving your configuration files.
 
     After re-running the script, verify the service is running:
 
@@ -194,6 +172,10 @@ Managed agents on Windows are upgraded through Fleet Control — update the desi
 </Tabs>
 
 ## Start, stop, and restart Agent Control [#start-stop-restart]
+
+<Callout variant="tip">
+  On Kubernetes, Agent Control pods are managed by a Helm release and reconciled by Flux. To restart Agent Control on Kubernetes, delete the pod and let Kubernetes recreate it: `kubectl delete pod <agent-control-pod-name> -n newrelic-agent-control`.
+</Callout>
 
 <Tabs>
   <TabsBar>
@@ -226,12 +208,33 @@ Managed agents on Windows are upgraded through Fleet Control — update the desi
   </TabsPages>
 </Tabs>
 
+## Upgrade managed agents [#upgrade-managed-agents]
+
+Managed agents are upgraded through Fleet Control — you never need to touch individual machines. Update the desired agent version in your fleet configuration and deploy. Agent Control detects the change and performs a non-disruptive rolling update, ensuring the new version is healthy before replacing the old one.
+
+1. Navigate to the configuration for your fleet in Fleet Control.
+2. Locate the agent you want to update (for example, `infrastructure`) and change the `chart_version` value.
+3. Save and deploy the updated configuration.
+
+Agent Control propagates the change to every cluster and host in the fleet. For fleets with many environments, this means a single config change rolls out your update everywhere simultaneously.
+
+### Example: Upgrade the infrastructure agent
+
+```yaml
+# Remote configuration for the infrastructure agent
+infrastructure:
+  chart_version: "5.0.110"  # Change this to the new version
+  chart_values:
+    newrelic-infrastructure:
+      enableProcessMetrics: true
+```
+
 <DocTiles>
   <DocTile
-    title="Monitor Agent Control"
+    title="Agent health and fleet visibility"
     path="/docs/new-relic-control/agent-control/monitoring"
   >
-    Check the health of Agent Control and its managed agents after an upgrade.
+    Verify that Agent Control and managed agents are running correctly after an upgrade.
   </DocTile>
 
   <DocTile

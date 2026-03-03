@@ -7,29 +7,26 @@ freshnessValidatedDate: never
   Agent Control and New Relic Control are now **generally available** for Kubernetes! Support for Linux hosts and Windows hosts is also in **public preview** program, pursuant to our [pre-release policies](/docs/licenses/license-information/referenced-policies/new-relic-pre-release-policy).
 </Callout>
 
-Agent Control provides a seamless approach for configuration independently of the environment where it is deployed. Two methods for managing agent configurations are available:
+Agent Control manages configuration at two distinct levels, and understanding the difference determines where you make changes:
 
-- **Local configuration:** A comprehensive `values.yaml` file used during the initial Helm installation.
+**Configure Agent Control itself:** Connection details (Fleet Control endpoint, OpAMP credentials), system identity, fleet association, and proxy settings. These are set at installation time in your local configuration file and rarely need to change. They control how the supervisor operates, not what it deploys.
 
-- **Remote configuration:** A centralized, YAML-based configuration you create in New Relic Control that is remotely deployed to your entire fleet.
+**Configure managed agents through Agent Control:** Agent-specific settings — versions, log paths, resource limits, scrape intervals, integration toggles — are managed in Fleet Control's remote configuration. Agent Control receives these settings over the OpAMP channel and applies them to each agent. Change a setting in Fleet Control; it propagates to every cluster and host in your fleet automatically.
 
-Remote configuration is the recommended method for day-to-day management. It ensures consistent agent behavior across your environment, simplifies change management, and enables you to scale without manually updating local YAML files on each host.
+This distinction matters when you're troubleshooting: if Agent Control isn't connecting to Fleet Control, look at the local config. If an agent isn't behaving as expected, look at Fleet Control's remote config.
 
-<Callout variant="tip">
-The `values-newrelic.yaml` file, which traditionally defined New Relic agent settings, now also includes configuration for Agent Control. The parameters you define in this file determine how both Agent Control and its managed agents operate. This file is referred to as the local configuration.
-</Callout>
+## Two layers, one file
 
-## Understanding the two layers of configuration
-Agent Control's configuration is structured in two layers:
+Agent Control's configuration uses two layers, which can coexist in the same file:
 
-1. **Agent Control's core configuration:** These are the top-level settings that control how Agent Control operates, such as its connection to New Relic, its identity, and fleet management details.
+1. **Agent Control's core configuration:** Top-level settings that control how the supervisor itself operates — connection to New Relic, identity, fleet association.
 
-2. **Managed agents' configurations:** These are the individual `chart_values` for each subagent (for example., Infrastructure Agent, Fluent Bit) that Agent Control deploys and manages.
+2. **Managed agents' configuration:** The `chart_values` or `agent_values` for each agent Agent Control deploys and manages (for example, Infrastructure Agent scrape settings, Fluent Bit log paths).
 
-When a local and remote configuration are both present, Agent Control applies the following logic:
+When both a local and a remote configuration are present, Agent Control follows this precedence rule:
 
-1. Remote configuration takes precedence. Any settings defined in a remote configuration from New Relic Control will override the corresponding settings in the local `values.yaml` file.
-2. To intentionally override remote settings with your local configuration, you can deploy an empty remote configuration via New Relic Control. This change will apply to all clusters in the selected fleet.
+- **Remote configuration always wins.** Any settings from Fleet Control override the corresponding settings in the local `values.yaml` or `config.yaml`.
+- To intentionally revert to local settings, deploy an empty remote configuration in Fleet Control. The change applies to all clusters and hosts in the selected fleet.
 
 ## Kubernetes configuration
 

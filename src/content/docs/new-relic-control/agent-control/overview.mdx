@@ -52,11 +52,15 @@ The core workflow is straightforward:
 3. **Deploy agents from Fleet Control.** Define which agents to run, their versions, and their configuration in the Fleet Control UI. Agent Control receives this desired state and deploys the agents.
 4. **Manage everything from Fleet Control.** Upgrade agents, update configuration, and monitor health across your entire fleet — all from the New Relic UI, without touching individual machines.
 
-## Core capabilities
+## What Agent Control handles for you
 
-### Agent lifecycle management
+Agent Control addresses five distinct responsibilities. Each maps to a dedicated section of the documentation.
 
-Agent Control handles the full lifecycle of your managed agents — installation, configuration, upgrades, and removal — declaratively. When you change the desired agent version in Fleet Control, Agent Control performs a rolling update on the affected clusters and hosts, ensuring new agents are healthy before replacing old ones.
+### 1. Deploy and manage agents at scale
+
+Whether you manage five clusters or five hundred Linux hosts, Agent Control eliminates per-machine operations. Define the desired agent state once in Fleet Control — which agents to run, at which versions, with which configuration — and Agent Control ensures every machine in your fleet converges to that state. Any deviation (a failed upgrade, a missing agent, a config that was manually changed) is detected and corrected automatically, without your involvement.
+
+Agent Control performs non-disruptive rolling updates: the new agent version is verified healthy before the old one is removed. No scripts to coordinate, no SSH, no drift.
 
 <img
   title="Agent lifecycle management"
@@ -84,14 +88,20 @@ Agent Control handles the full lifecycle of your managed agents — installation
         AC-->>FC: Status: config applied
 */}
 
-On Kubernetes, Agent Control uses [Flux](https://fluxcd.io/) as its Helm-based delivery engine — providing the same GitOps-style reconciliation patterns your platform team may already use. On Linux and Windows hosts, Agent Control manages agents as native system services using `systemd` or the Windows Service Manager.
+On Kubernetes, Agent Control uses [Flux](https://fluxcd.io/) as its delivery engine, managing agents as Helm releases through HelmRelease and HelmRepository CRDs. On Linux and Windows, agents run as native system services supervised by Agent Control.
 
-### Centralized configuration management
+→ [Install Agent Control](/docs/new-relic-control/agent-control/setup) · [Supported agent types](/docs/new-relic-control/agent-control/agent-types)
 
-Agent Control uses a two-layer configuration model:
+### 2. Manage configurations from a single source
 
-- **Local configuration** (defined at install time in your `values.yaml` or `config.yaml`) sets Agent Control's own connection details and identity. It is the fallback when no remote configuration is present.
-- **Remote configuration** (defined in Fleet Control) is the authoritative source for all agent settings — versions, chart values, resource limits, integration config. Remote configuration always takes precedence over local values.
+Agent settings — scrape intervals, log paths, resource limits, integration toggles — flow from Fleet Control to every cluster and host in your fleet over a secure, outbound-only channel. Change a setting in Fleet Control once; Agent Control applies it everywhere.
+
+The two-layer model:
+
+- **Remote configuration** (from Fleet Control) is always authoritative — it overrides any local settings.
+- **Local configuration** (`values.yaml` on Kubernetes, `config.yaml` on Linux/Windows) is the fallback when no remote configuration has been defined.
+
+Agent Control integrates with [HashiCorp Vault](https://www.vaultproject.io/) and Kubernetes Secrets so credentials are injected at runtime — license keys and tokens never need to live in config files.
 
 <img
   title="Agent Control configuration flow"
@@ -117,16 +127,30 @@ Agent Control uses a two-layer configuration model:
         style Vault fill:#f0b400,color:#000
 */}
 
-This model means you can manage different agent types — the New Relic infrastructure agent, OpenTelemetry collectors, Fluent Bit — with a single, unified workflow. Agent Control translates the generic remote configuration into the format each agent expects.
+→ [Configuration reference](/docs/new-relic-control/agent-control/configuration)
 
-### Security and secrets management
+### 3. Understand what's deployed and how healthy it is
 
-Agent Control is designed with security as a first principle:
+Agent Control continuously monitors every agent it manages and reports health, version, and configuration state back to Fleet Control. From the Fleet Control UI you can see, across your entire fleet, which agents are running, the version in use on each cluster or host, whether they're healthy, and what configuration they received — without connecting to individual machines.
 
-- **Outbound-only connectivity.** Agent Control initiates the connection to Fleet Control. Your environment does not need to accept inbound connections.
-- **Encrypted, authenticated communication.** All traffic between Agent Control and Fleet Control uses mutual TLS with rotating credentials.
-- **External secrets injection.** Agent Control integrates with [HashiCorp Vault](https://www.vaultproject.io/) and Kubernetes Secrets to inject sensitive values (license keys, API tokens) into agent configurations at runtime, without storing them in configuration files.
-- **Minimum required permissions.** On Kubernetes, Agent Control only manages Flux Custom Resources (`HelmRelease`, `HelmRepository`) — it doesn't need cluster-admin rights itself. On Linux and Windows, elevated privileges are used only for agent lifecycle operations, not arbitrary commands.
+For direct, on-machine inspection, Agent Control exposes a local HTTP `/status` endpoint that returns the live health of the supervisor and every managed agent. This is your entry point when you need to diagnose a specific cluster or host, or verify that a change was applied correctly.
+
+→ [Agent health and fleet visibility](/docs/new-relic-control/agent-control/monitoring)
+
+### 4. Manage Agent Control itself
+
+Agent Control is itself a managed service. On Kubernetes, you can update the Agent Control supervisor version directly from Fleet Control — no direct cluster access required. On Linux and Windows, Agent Control is packaged as a standard system service and upgraded through your OS package manager or by re-running the install script. Start, stop, and restart commands use standard OS tools (`systemctl` or PowerShell).
+
+→ [Upgrades and lifecycle](/docs/new-relic-control/agent-control/upgrading)
+
+### Security
+
+All Agent Control capabilities operate under a consistent security model:
+
+- **Outbound-only connectivity.** Agent Control initiates all connections to Fleet Control. Your environment does not need to accept inbound traffic.
+- **Encrypted, authenticated communication.** All Fleet Control traffic uses mutual TLS with rotating credentials.
+- **Secrets never in config files.** Credentials are injected at runtime from Vault or Kubernetes Secrets.
+- **Minimum required permissions.** On Kubernetes, Agent Control manages only Flux CRDs — not cluster-admin operations. On Linux and Windows, elevated privileges are scoped to declared lifecycle tasks only.
 
 ### Multi-environment support
 
@@ -340,23 +364,23 @@ Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, OsHardwareA
   </DocTile>
 
   <DocTile
-    title="Supported agent types"
-    path="/docs/new-relic-control/agent-control/agent-types"
-  >
-    Review which agents Agent Control can manage and their support status per environment.
-  </DocTile>
-
-  <DocTile
     title="Configuration reference"
     path="/docs/new-relic-control/agent-control/configuration"
   >
-    Understand local and remote configuration for Kubernetes, Linux, and Windows.
+    Configure Agent Control and manage agent settings through Fleet Control remote config.
   </DocTile>
 
   <DocTile
-    title="Troubleshooting"
-    path="/docs/new-relic-control/agent-control/troubleshooting"
+    title="Agent health and fleet visibility"
+    path="/docs/new-relic-control/agent-control/monitoring"
   >
-    Diagnose and fix common installation and connectivity issues.
+    Monitor what's running across your fleet and verify agent health directly on any cluster or host.
+  </DocTile>
+
+  <DocTile
+    title="Upgrades and lifecycle"
+    path="/docs/new-relic-control/agent-control/upgrading"
+  >
+    Upgrade Agent Control itself and keep managed agent versions aligned across your fleet.
   </DocTile>
 </DocTiles>
