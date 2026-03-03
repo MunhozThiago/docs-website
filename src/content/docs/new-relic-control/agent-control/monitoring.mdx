@@ -70,49 +70,7 @@ Agent Control exposes a local HTTP status endpoint that provides a health check 
   </Step>
 </Steps>
 
-### Status response structure
-
-The `/status` endpoint returns a JSON response with the health of the supervisor and all managed agents. Here's an example:
-
-<CollapserGroup>
-  <Collapser id="status-json-k8s" title="Example status response">
-    ```json
-    {
-      "supervisor": {
-        "status": "healthy",
-        "version": "0.5.2",
-        "uptime": "3h42m"
-      },
-      "agents": [
-        {
-          "name": "infrastructure",
-          "agent_type": "newrelic/com.newrelic.infrastructure:0.1.0",
-          "status": "healthy",
-          "chart_version": "5.0.109",
-          "last_reconciled": "2026-03-02T10:15:00Z"
-        },
-        {
-          "name": "logs",
-          "agent_type": "newrelic/io.fluentbit:0.1.0",
-          "status": "healthy",
-          "chart_version": "1.25.1",
-          "last_reconciled": "2026-03-02T10:15:00Z"
-        }
-      ]
-    }
-    ```
-
-    | Field | Description |
-    | :--- | :--- |
-    | `supervisor.status` | Overall health of the Agent Control supervisor: `healthy`, `degraded`, or `error` |
-    | `supervisor.version` | Version of the Agent Control supervisor running on the cluster |
-    | `agents[].name` | Name you assigned to the agent in your fleet configuration |
-    | `agents[].agent_type` | The agent type identifier and version |
-    | `agents[].status` | Health status of this specific agent: `healthy`, `degraded`, `error`, or `unknown` |
-    | `agents[].chart_version` | The Helm chart version currently deployed for this agent |
-    | `agents[].last_reconciled` | Timestamp of the last time Agent Control reconciled this agent's state |
-  </Collapser>
-</CollapserGroup>
+For the JSON response format and field descriptions, see [Status response structure](#status-response-structure) below.
 
 <!-- TODO: screenshot of kubectl output showing healthy Agent Control pods -->
 
@@ -156,7 +114,7 @@ Agent Control on Linux exposes the same HTTP status endpoint as Kubernetes.
 curl localhost:51200/status
 ```
 
-The response structure is identical to the Kubernetes status response. See [Status response structure](#status-response-structure) above for field descriptions.
+For field descriptions, see [Status response structure](#status-response-structure) below.
 
 <Callout variant="tip">
   If `curl` returns a connection refused error, verify the service is running with `systemctl status newrelic-agent-control` and check the logs for startup errors.
@@ -209,7 +167,7 @@ Agent Control on Windows exposes the same HTTP status endpoint.
 Invoke-WebRequest -Uri "http://localhost:51200/status" -UseBasicParsing | Select-Object -ExpandProperty Content
 ```
 
-The response structure is identical to the Kubernetes status response. See [Status response structure](#status-response-structure) above for field descriptions.
+For field descriptions, see [Status response structure](#status-response-structure) below.
 
 <Callout variant="tip">
   If the request fails, verify that port 51200 is not blocked by the local Windows Firewall or antivirus software.
@@ -221,18 +179,99 @@ The response structure is identical to the Kubernetes status response. See [Stat
   </TabsPages>
 </Tabs>
 
+## Status response structure
+
+The `/status` endpoint returns a JSON response with the health of the supervisor and all managed agents. The response format is identical across Kubernetes, Linux, and Windows environments.
+
+<CollapserGroup>
+  <Collapser id="status-json" title="Example status response">
+    ```json
+    {
+      "supervisor": {
+        "status": "healthy",
+        "version": "0.5.2",
+        "uptime": "3h42m"
+      },
+      "agents": [
+        {
+          "name": "infrastructure",
+          "agent_type": "newrelic/com.newrelic.infrastructure:0.1.0",
+          "status": "healthy",
+          "chart_version": "5.0.109",
+          "last_reconciled": "2026-03-02T10:15:00Z"
+        },
+        {
+          "name": "logs",
+          "agent_type": "newrelic/io.fluentbit:0.1.0",
+          "status": "healthy",
+          "chart_version": "1.25.1",
+          "last_reconciled": "2026-03-02T10:15:00Z"
+        }
+      ]
+    }
+    ```
+
+    | Field | Description |
+    | :--- | :--- |
+    | `supervisor.status` | Overall health of Agent Control: `healthy`, `degraded`, or `error` |
+    | `supervisor.version` | Version of Agent Control currently running |
+    | `agents[].name` | Name you assigned to the agent in your fleet configuration |
+    | `agents[].agent_type` | The agent type identifier and version |
+    | `agents[].status` | Health of this specific agent: `healthy`, `degraded`, `error`, or `unknown` |
+    | `agents[].chart_version` | The Helm chart version deployed (Kubernetes only) |
+    | `agents[].last_reconciled` | Timestamp of the last Agent Control reconciliation for this agent |
+  </Collapser>
+</CollapserGroup>
+
 ## Monitor managed agents
 
-After verifying that the Agent Control supervisor is healthy, check the health of the individual agents it manages.
+After verifying that Agent Control is healthy, check the individual agents it manages.
 
-For **Kubernetes**, you can inspect the HelmRelease resources managed by Flux:
+<Tabs>
+  <TabsBar>
+    <TabsBarItem id="agents-k8s">Kubernetes</TabsBarItem>
+    <TabsBarItem id="agents-linux">Linux hosts</TabsBarItem>
+    <TabsBarItem id="agents-windows">Windows hosts</TabsBarItem>
+  </TabsBar>
+
+  <TabsPages>
+    <TabsPageItem id="agents-k8s">
+
+Inspect the HelmRelease resources that Flux manages for each agent:
 
 ```shell
 kubectl get helmreleases -n newrelic
 kubectl describe helmrelease <agent-name> -n newrelic
 ```
 
-For **Linux and Windows hosts**, each agent's status is reported in the `/status` endpoint response (`agents[].status`). For deeper diagnostics, check the individual agent's own logs — for example, the Infrastructure Agent logs at `/var/log/newrelic-infra/newrelic-infra.log` on Linux.
+    </TabsPageItem>
+
+    <TabsPageItem id="agents-linux">
+
+Each agent's health is reported in the `/status` endpoint under `agents[].status`. For deeper diagnostics, check the agent's own logs:
+
+```bash
+# Infrastructure Agent
+tail -f /var/log/newrelic-infra/newrelic-infra.log
+
+# NRDOT Collector
+journalctl -u nrdot -f
+```
+
+    </TabsPageItem>
+
+    <TabsPageItem id="agents-windows">
+
+Each agent's health is reported in the `/status` endpoint under `agents[].status`. For deeper diagnostics, check the agent's log files:
+
+```powershell
+# Infrastructure Agent
+Get-Content "C:\ProgramData\New Relic\newrelic-infra\newrelic-infra.log" -Tail 50 -Wait
+```
+
+    </TabsPageItem>
+  </TabsPages>
+</Tabs>
 
 <!-- TODO: screenshot of Fleet Control showing per-agent health status across a fleet -->
 
