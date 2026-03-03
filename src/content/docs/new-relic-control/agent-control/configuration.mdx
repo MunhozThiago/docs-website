@@ -7,26 +7,38 @@ freshnessValidatedDate: never
   Agent Control and New Relic Control are now **generally available** for Kubernetes! Support for Linux hosts and Windows hosts is also in **public preview** program, pursuant to our [pre-release policies](/docs/licenses/license-information/referenced-policies/new-relic-pre-release-policy).
 </Callout>
 
-Agent Control manages configuration at two distinct levels, and understanding the difference determines where you make changes:
+Agent Control has two configuration paths, and they work differently in ways that matter for day-to-day operations.
 
-**Configure Agent Control itself:** Connection details (Fleet Control endpoint, OpAMP credentials), system identity, fleet association, and proxy settings. These are set at installation time in your local configuration file and rarely need to change. They control how the supervisor operates, not what it deploys.
+**Local configuration** — Config files on the machine (`values.yaml` on Kubernetes, `config.yaml` or `local_config.yaml` on Linux/Windows). Editing these requires direct machine access (SSH, RDP), root or Administrator privileges, and a manual service restart to apply changes. This is how Agent Control is configured at installation time and how you set its own connection settings to Fleet Control.
 
-**Configure managed agents through Agent Control:** Agent-specific settings — versions, log paths, resource limits, scrape intervals, integration toggles — are managed in Fleet Control's remote configuration. Agent Control receives these settings over the OpAMP channel and applies them to each agent. Change a setting in Fleet Control; it propagates to every cluster and host in your fleet automatically.
+**Remote configuration (Fleet Control)** — Agent settings sent from Fleet Control over the OpAMP protocol. Changes you make in the Fleet Control UI propagate to every cluster and host in your fleet automatically, with no machine access required. This is the recommended approach for managing agents at any scale beyond a single host.
 
-This distinction matters when you're troubleshooting: if Agent Control isn't connecting to Fleet Control, look at the local config. If an agent isn't behaving as expected, look at Fleet Control's remote config.
+| | Local configuration | Remote (Fleet Control) |
+| :--- | :--- | :--- |
+| **Access required** | Root/admin on each machine | New Relic user with appropriate role |
+| **How changes apply** | Edit file → restart service | Change in Fleet Control UI → applied automatically |
+| **Scale** | One machine at a time | Entire fleet simultaneously |
+| **Who should use it** | Installation, connection setup, testing | Day-to-day agent management |
 
 ## Two layers, one file
 
-Agent Control's configuration uses two layers, which can coexist in the same file:
+Agent Control's configuration uses two layers — both can coexist in the same local file and in Fleet Control's remote configuration:
 
-1. **Agent Control's core configuration:** Top-level settings that control how the supervisor itself operates — connection to New Relic, identity, fleet association.
+**Layer 1 — Agent Control's own settings:** How the supervisor connects to New Relic, its system identity, fleet association, and proxy configuration. These are set locally at installation time. **Fleet Control does not override these settings** — they are not part of the remote configuration.
 
-2. **Managed agents' configuration:** The `chart_values` or `agent_values` for each agent Agent Control deploys and manages (for example, Infrastructure Agent scrape settings, Fluent Bit log paths).
+**Layer 2 — Managed agent settings:** Agent-specific configuration — versions, chart values, log paths, resource limits, integration toggles. These settings are what Fleet Control's remote configuration controls.
 
-When both a local and a remote configuration are present, Agent Control follows this precedence rule:
+<Callout variant="important" title="Remote configuration is continuous, not one-time">
+  When Agent Control is connected to Fleet Control, the remote configuration is applied **immediately and continuously**. This means:
 
-- **Remote configuration always wins.** Any settings from Fleet Control override the corresponding settings in the local `values.yaml` or `config.yaml`.
-- To intentionally revert to local settings, deploy an empty remote configuration in Fleet Control. The change applies to all clusters and hosts in the selected fleet.
+  - Any local changes you make to **agent settings** (Layer 2) are overridden the next time Agent Control connects to Fleet Control.
+  - This behavior persists across restarts, upgrades, and reinstallations — whenever Agent Control re-establishes its Fleet Control connection, it receives and applies the remote desired state.
+  - Agent Control's **own connection settings** (Layer 1) are local-only and are never overridden by Fleet Control.
+
+  If you need local agent settings to take effect:
+  - **Deploy an empty remote configuration** in Fleet Control (removes the remote override for that fleet), or
+  - **Disconnect Agent Control from Fleet Control** entirely.
+</Callout>
 
 ## Kubernetes configuration
 
@@ -39,7 +51,11 @@ These instructions and examples apply to Agent Control running on a Kubernetes c
 
 ### Local `values.yaml` configuration for Kubernetes
 
-The local configuration file for Kubernetes, used during installation, contains all the settings for Agent Control and its managed agents.
+The local `values.yaml` file contains both Agent Control's connection settings (Layer 1) and the initial agent definitions (Layer 2). It is applied at install time via Helm and is your entry point before Fleet Control remote configuration takes over.
+
+<Callout variant="tip">
+  Once Agent Control is connected to Fleet Control, **agent settings defined here (Layer 2) will be overridden** by the Fleet Control remote configuration. Use the local file for Agent Control's own connection settings, and use Fleet Control for ongoing agent management.
+</Callout>
 
 This example shows the two layers of configuration within a single file.
 
@@ -657,17 +673,26 @@ You need to set up additional resources to enable authentication for accessing y
 
 ## Linux configuration
 
-These are the default paths for Agent Control configuration:
+Agent Control on Linux uses two configuration files with distinct roles:
 
-* `Local` configuration file: `/etc/newrelic-agent-control/config.yaml`
-* `Remote` configuration file: `/var/lib/newrelic-agent-control/config.yaml` (if enabled via Fleet Control deployment)
-* Service definition: `/lib/systemd/system/newrelic-agent-control.service`
-* Service environment file: `/etc/newrelic-agent-control/newrelic-agent-control.conf`
+| File | Role | When to edit |
+| :--- | :--- | :--- |
+| `/etc/newrelic-agent-control/config.yaml` | **Local config** — Layer 1 (Agent Control connection settings) + Layer 2 (initial agent definitions) | At installation, and when changing Agent Control's own connection settings |
+| `/var/lib/newrelic-agent-control/config.yaml` | **Remote config** — written by Agent Control when it receives configuration from Fleet Control | **Never edit manually** — this file is managed by Agent Control |
+| `/lib/systemd/system/newrelic-agent-control.service` | Service definition | Rarely, only for service-level tuning |
+| `/etc/newrelic-agent-control/newrelic-agent-control.conf` | Service environment file | For environment variable overrides |
 
-By default, the agent might orchestrate the infrastructure agent and the OpenTelemetry collector:
+<Callout variant="important">
+  The `agents` block in `/etc/newrelic-agent-control/config.yaml` (Layer 2) sets initial agent definitions. **Once Agent Control connects to Fleet Control, this block is controlled by Fleet Control's remote configuration and local changes will be overridden.** Modify the `fleet_control` block (Layer 1) as needed — those settings are local-only and are not overridden.
+</Callout>
+
+By default, the local `config.yaml` orchestrates the infrastructure agent and the OpenTelemetry collector:
 
 ```yml
-# Configures the integration with Fleet Control
+# ── Layer 1: Agent Control connection settings ────────────────────────────────
+# These settings are LOCAL-ONLY. Fleet Control does not override them.
+# Edit here when Agent Control needs to connect to a different endpoint,
+# use different credentials, or change its fleet association.
 fleet_control:
   # EU region? Use: https://opamp.service.eu.newrelic.com/v1/opamp
   endpoint: https://opamp.service.newrelic.com/v1/opamp
@@ -676,11 +701,14 @@ fleet_control:
   auth_config:
     # EU region? Use: https://system-identity-oauth.service.eu.newrelic.com/oauth2/token
     token_url: "https://system-identity-oauth.service.newrelic.com/oauth2/token"
-    client_id: "YOUR_CLIENT_ID
+    client_id: "YOUR_CLIENT_ID"
     provider: "local"
     private_key_path: "path/to/key"
 
-# Configures the agents to be supervised by Agent Control
+# ── Layer 2: Initial agent definitions ───────────────────────────────────────
+# IMPORTANT: When Agent Control is connected to Fleet Control, this section
+# is overridden by the Fleet Control remote configuration. Changes made here
+# will not persist once Agent Control re-establishes its Fleet Control connection.
 agents:
   # Agent name (RFC-1035 valid label)
   nr-infra-agent:
@@ -693,11 +721,20 @@ agents:
 You can rename or remove either agent based on your observability requirements.
 Agent name must be a [valid RFC-1035](https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#rfc-1035-label-names) label name.
 
-You can also use environment variables to override agent settings:
-* Use the `NR_` (single underscore) prefix to target the main Agent Control configuration.
-* Use `__` (double underscores) to separate nested keys. This is required to avoid collisions with configuration keys that contain underscores.
-* Environment variables take precedence over the local configuration file. If remote configuration is enabled, environment variables are not considered.
-* For example, to set the `fleet_control.endpoint` dynamically: `NR_FLEET_CONTROL__ENDPOINT=https://opamp.service.newrelic.com/v1/opamp`
+You can also use environment variables to override Agent Control's own settings (Layer 1). The full precedence order is:
+
+1. **Remote configuration** (Fleet Control) — highest priority, overrides agent settings (Layer 2)
+2. **Environment variables** — override local config file values for Agent Control settings (Layer 1)
+3. **Local config file** (`config.yaml`) — lowest priority
+
+Environment variable conventions:
+* Use the `NR_` prefix to target Agent Control's main configuration.
+* Use `__` (double underscores) to separate nested keys.
+* For example, to set `fleet_control.endpoint` dynamically: `NR_FLEET_CONTROL__ENDPOINT=https://opamp.service.newrelic.com/v1/opamp`
+
+<Callout variant="caution">
+  Environment variables only apply to Agent Control's own settings (Layer 1). They do not override agent settings (Layer 2) when Fleet Control remote configuration is active. If you need to override an agent setting via environment variable, you must first remove the remote configuration for that agent in Fleet Control.
+</Callout>
 
 ### Configure the agents [#agents-config]
 
@@ -1095,17 +1132,26 @@ agents:
 
 ## Windows configuration
 
-These are the default paths for Agent Control configuration on Windows:
+Agent Control on Windows uses two configuration files with distinct roles:
 
-* `Local` configuration file: `C:\Program Files\New Relic\newrelic-agent-control\local-data\agent-control\local_config.yaml`
-* `Remote` configuration file: `C:\ProgramData\New Relic\newrelic-agent-control\fleet-data\agent-control\remote_config.yaml` (synced from Fleet Control)
-* Service executable: `C:\Program Files\New Relic\newrelic-agent-control\newrelic-agent-control.exe`
-* Log directory: `C:\ProgramData\New Relic\newrelic-agent-control\logs\`
+| File | Role | When to edit |
+| :--- | :--- | :--- |
+| `C:\Program Files\New Relic\newrelic-agent-control\local-data\agent-control\local_config.yaml` | **Local config** — Layer 1 (Agent Control connection settings) + Layer 2 (initial agent definitions) | At installation, and when changing Agent Control's own connection settings |
+| `C:\ProgramData\New Relic\newrelic-agent-control\fleet-data\agent-control\remote_config.yaml` | **Remote config** — written by Agent Control when it receives configuration from Fleet Control | **Never edit manually** — this file is managed by Agent Control |
+| `C:\Program Files\New Relic\newrelic-agent-control\newrelic-agent-control.exe` | Service executable | Never |
+| `C:\ProgramData\New Relic\newrelic-agent-control\logs\` | Log directory | Read-only for diagnostics |
+
+<Callout variant="important">
+  The `agents` block in `local_config.yaml` (Layer 2) sets initial agent definitions. **Once Agent Control connects to Fleet Control, this block is controlled by Fleet Control's remote configuration and local changes will be overridden.** Modify the `fleet_control` block (Layer 1) as needed — those settings are local-only and are not overridden.
+</Callout>
 
 By default, Agent Control on Windows can orchestrate the infrastructure agent and the OpenTelemetry collector:
 
 ```yaml
-# Configures the integration with Fleet Control
+# ── Layer 1: Agent Control connection settings ────────────────────────────────
+# These settings are LOCAL-ONLY. Fleet Control does not override them.
+# Edit here when Agent Control needs to connect to a different endpoint,
+# use different credentials, or change its fleet association.
 fleet_control:
   endpoint: https://opamp.service.newrelic.com/v1/opamp
   headers:
@@ -1116,7 +1162,10 @@ fleet_control:
     provider: "local"
     private_key_path: "path\\to\\key"
 
-# Configures the agents to be supervised by Agent Control
+# ── Layer 2: Initial agent definitions ───────────────────────────────────────
+# IMPORTANT: When Agent Control is connected to Fleet Control, this section
+# is overridden by the Fleet Control remote configuration. Changes made here
+# will not persist once Agent Control re-establishes its Fleet Control connection.
 agents:
   # Agent name (RFC-1035 valid label)
   nr-infra-agent:
