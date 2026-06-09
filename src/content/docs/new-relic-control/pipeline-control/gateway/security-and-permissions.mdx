@@ -1,0 +1,238 @@
+---
+title: Pipeline Control gateway security and permissions
+metaDescription: 'Network model, Kubernetes RBAC, configuration integrity, and audit behavior for the Pipeline Control gateway, with and without Flux.'
+freshnessValidatedDate: never
+---
+
+This page documents the network model, Kubernetes permissions, configuration integrity, and audit behavior for the Pipeline Control gateway and the Agent Control component that delivers its configuration. It covers **both deployment modes** — with Flux (the standard, full-management install) and without Flux (configuration-only) — side by side, so a security reviewer can see exactly how the two differ.
+
+It is intended for security and platform teams reviewing New Relic Control for compliance with internal change-control, network, and least-privilege policies.
+
+For the broader Fleet Control and Agent Control security model that applies across every environment (TLS, configuration signing, system identities, secrets handling, proxy support), see [Fleet Control security](/docs/new-relic-control/fleet-control/security). For the deployment-mode trade-offs themselves, see [Agent Control deployment configurations](/docs/new-relic-control/agent-control/deployment-configurations).
+
+## The two modes at a glance
+
+Both modes share the same trust model: Agent Control connects **outbound only**, all traffic is TLS-encrypted, and every configuration is cryptographically signed by New Relic and verified before it is applied. What differs is **who owns the gateway lifecycle**, and therefore the in-cluster permission footprint and the required outbound egress.
+
+| Dimension | With Flux (standard / full management) | Without Flux (configuration only) |
+|---|---|---|
+| **Gateway lifecycle** (install, upgrade, restart) | New Relic, via Agent Control's embedded Flux | You, via your own Helm/CD pipeline |
+| **Config delivery mechanism** | `HelmRelease` reconciled by the embedded Flux | A single `ConfigMap` mounted by the gateway |
+| **Inbound connections** | None | None |
+| **Outbound egress** | OpAMP + OAuth + artifact signatures **+ Helm chart repo + OCI image registries** | OpAMP + OAuth + artifact signatures **only** |
+| **In-cluster RBAC footprint** | ServiceAccount + ClusterRole; Flux CRD verbs **active** (manages `HelmRelease`/`HelmRepository`) | ServiceAccount + ClusterRole bound via **RoleBindings** to two namespaces; Flux CRD verbs **inert** |
+| **What Agent Control writes** | `HelmRelease` + `HelmRepository` CRDs and a ConfigMap | One ConfigMap, nothing else |
+| **Config-integrity model** | Signed by New Relic, verified before apply | Signed by New Relic, verified before apply |
+| **Effect of a pipeline-rule change** | Flux reconciles the change, then rolls the gateway pods | ConfigMap is updated, gateway reloads |
+| **Audit actors in the kube audit log** | Agent Control ServiceAccount on Flux CRDs **and** the ConfigMap | Agent Control ServiceAccount on the ConfigMap only |
+
+<Callout variant="tip" title="Choosing a mode is a change-control decision, not a security trade-off">
+  Both modes are outbound-only and apply only signed configuration. Without Flux gives you a smaller in-cluster permission surface and removes New Relic from the gateway's image-pull and upgrade path — at the cost of you owning gateway installs and upgrades. See [Install without Flux](/docs/new-relic-control/pipeline-control/gateway/set-up-without-flux) and [deployment configurations](/docs/new-relic-control/agent-control/deployment-configurations).
+</Callout>
+
+## Network model
+
+Agent Control communicates **exclusively over outbound HTTPS connections (TLS 1.2+)**. New Relic never initiates a connection into your cluster. There are no inbound ports, no webhooks, and no inbound listeners of any kind, in either mode.
+
+The following outbound connections are required:
+
+| Destination | Port | Protocol | Required in | Purpose |
+|---|---|---|---|---|
+| `opamp.service.newrelic.com` | 443 | HTTPS | Both | Receive pipeline configuration from Fleet Control (US region) |
+| `opamp.service.eu.newrelic.com` | 443 | HTTPS | Both | Receive pipeline configuration from Fleet Control (EU region) |
+| `system-identity-oauth.service.newrelic.com` | 443 | HTTPS | Both | OAuth2 token renewal for the Agent Control system identity |
+| `publickeys.newrelic.com` | 443 | HTTPS | Both | Verify New Relic configuration and artifact signatures (US region) |
+| `publickeys.eu.newrelic.com` | 443 | HTTPS | Both | Verify New Relic configuration and artifact signatures (EU region) |
+| `helm-charts.newrelic.com` | 443 | HTTPS | **With Flux only** | Pull the gateway Helm chart for install/upgrade |
+| OCI image registry (for example, Docker Hub) | 443 | HTTPS | **With Flux only** | Pull gateway container images |
+
+In **configuration-only mode (without Flux)**, Agent Control does **not** connect to the Helm chart repository or to any OCI image registry. The gateway lifecycle — installs, upgrades, image pulls — is your responsibility and follows your existing deployment pipeline.
+
+For environments with restricted egress, Agent Control honors the standard `HTTP_PROXY` / `HTTPS_PROXY` variables, so all of the above can be routed through your proxy. See [Proxy support](/docs/new-relic-control/fleet-control/security#proxy-support).
+
+### How configuration delivery works (without Flux)
+
+Agent Control maintains a persistent outbound connection to Fleet Control. When you change a pipeline rule in the Pipeline Control UI, Fleet Control makes that configuration available on its end. Agent Control pulls the update, **verifies its signature**, then writes it to a single ConfigMap in your cluster. New Relic does not push data inbound into your cluster at any point.
+
+```
+Fleet Control (New Relic)
+        │
+        │  HTTPS outbound (port 443)
+        │  Agent Control polls / pulls, verifies signature
+        ▼
+  Agent Control pod (your cluster)
+        │
+        │  In-cluster kube-apiserver call
+        │  Writes one ConfigMap
+        ▼
+  pipeline-control-gateway-custom-config (ConfigMap)
+        │
+        │  Volume mount
+        ▼
+  Pipeline Control Gateway pod
+```
+
+### How configuration delivery works (with Flux)
+
+The trust direction is identical — still outbound, still signed — but Agent Control's embedded Flux additionally reconciles the gateway's Helm release, which is what gives New Relic the ability to install and upgrade the gateway for you.
+
+```
+Fleet Control (New Relic)
+        │
+        │  HTTPS outbound (port 443), signed config + desired version
+        ▼
+  Agent Control pod (your cluster)
+        │
+        │  Generates / updates HelmRelease + HelmRepository CRDs
+        ▼
+  Embedded Flux  ──pulls chart + image──▶  helm-charts.newrelic.com / OCI registry (outbound)
+        │
+        │  helm install / upgrade
+        ▼
+  Pipeline Control Gateway pod
+```
+
+## Authentication
+
+Agent Control authenticates to New Relic; New Relic never authenticates *into* your cluster.
+
+* **Agent Control to Fleet Control:** a non-human **system identity** (a client ID and secret, or a key pair and token). Only an authorized Agent Control instance can receive configuration. Tokens are renewed over the OAuth2 endpoint listed above.
+* **Gateway to New Relic ingest:** your standard New Relic **license key**, used only to send the filtered telemetry onward.
+* **Bootstrap credential expiry:** the client secret embedded in the generated install values is short-lived (it expires 12 hours after generation). It is used once to establish the durable system identity; if install stalls past that window, you regenerate it from the guided install. It is not a long-lived credential.
+
+For the full authentication and authorization model, including the platform roles required to manage fleets, see [Fleet Control security: authentication and authorization](/docs/new-relic-control/fleet-control/security#authentication-and-authorization).
+
+## Configuration integrity
+
+This is identical in both modes and is one of the strongest answers to "how do we know what runs in our cluster is what New Relic intended":
+
+* **TLS in transit:** all communication uses TLS 1.2+.
+* **Cryptographic signing:** every configuration delivered from Fleet Control is signed by New Relic. Agent Control **verifies the signature before applying** any configuration, so a tampered or spoofed configuration is rejected, never written to your cluster.
+* **Signature verification endpoint:** Agent Control fetches New Relic's public keys from `publickeys.newrelic.com` (or the EU equivalent) to perform that verification.
+* **Secrets are never transmitted in configuration payloads:** configurations carry placeholder references, not secret values, which are resolved locally at runtime. See [Secrets handling](/docs/new-relic-control/fleet-control/security#secure-configuration-and-secrets-handling).
+
+## Kubernetes permissions
+
+Agent Control uses a Kubernetes **ServiceAccount** with a **ClusterRole**. The way that role is bound, and which of its rules are actually exercised, depends on the mode.
+
+### Without Flux (configuration only)
+
+The ClusterRole is bound via **RoleBindings** — not a ClusterRoleBinding — to exactly two namespaces:
+
+1. The Agent Control installation namespace (the namespace you choose during install; the gateway guided install defaults to `newrelic`)
+2. The sub-agents namespace where the gateway and its ConfigMap live
+
+Agent Control has no access to any other namespace in your cluster.
+
+| API group | Resources | Verbs | Purpose |
+|---|---|---|---|
+| *(core)* | `configmaps` | get, list, create, delete, deletecollection, patch, update, watch | Deliver pipeline configuration to the gateway |
+| *(core)* | `namespaces` | get | Resolve target namespace |
+| *(core)* | `secrets` | get, list, create, delete, deletecollection, patch, update, watch | Store internal state (for example, connection credentials) |
+| `apps` | `deployments`, `daemonsets`, `statefulsets` | get, list, watch | Health checks on the gateway workload — **read-only** |
+| `source.toolkit.fluxcd.io`, `helm.toolkit.fluxcd.io` | `*` | full | Flux lifecycle management — **inert in this mode** |
+| `newrelic.com` | `*` | full | New Relic custom resources |
+
+<Callout variant="important" title="Note on the Flux rules">
+  The ClusterRole is shared between both modes, so it always includes Flux CRD permissions. In configuration-only mode, Agent Control never creates, reads, or modifies any Flux resource — these rules are inert. You can verify this directly in your cluster audit log: the Agent Control service account will show **no** calls to `source.toolkit.fluxcd.io` or `helm.toolkit.fluxcd.io`. If your policy requires it, this is an auditable, enforceable guarantee.
+</Callout>
+
+### With Flux (standard)
+
+In standard mode the same ServiceAccount is used, but the Flux rules above are **active**: Agent Control's embedded Flux creates and reconciles `HelmRelease` and `HelmRepository` custom resources (these CRDs are cluster-scoped) to install and upgrade the gateway. The health-check verbs on `deployments`, `daemonsets`, and `statefulsets` remain read-only.
+
+If you run Agent Control against **your own** Flux instance instead of the embedded one, you control the exact permission set granted to Flux. A least-privilege `ClusterRole` for that case is published in [Agent Control deployment configurations](/docs/new-relic-control/agent-control/deployment-configurations#custom-flux).
+
+### What Agent Control writes to your cluster
+
+**Without Flux**, Agent Control creates and maintains exactly one Kubernetes object:
+
+| Object | Kind | Namespace | Name |
+|---|---|---|---|
+| Gateway pipeline configuration | ConfigMap | sub-agents namespace | `pipeline-control-gateway-custom-config` (configurable) |
+
+The ConfigMap holds the OTel collector configuration generated from your pipeline rules. No other cluster objects are created or modified by Agent Control in this mode.
+
+**With Flux**, Agent Control additionally maintains the `HelmRelease` and `HelmRepository` custom resources that drive the gateway install and upgrade, in the Agent Control namespace.
+
+Every write to any of these objects is recorded in the Kubernetes audit log with Agent Control's service account as the actor.
+
+## Operational behavior to be aware of
+
+Security and change-control reviewers usually want the failure modes, not just the happy path. The following behaviors are expected and worth accounting for in your runbooks:
+
+* **A pipeline-rule change restarts the gateway pods.** Applying a new configuration triggers a rolling restart of the gateway so it picks up the change. A brief telemetry gap is possible during the restart window; the gateway resumes with the new configuration once pods are healthy. The window is typically larger in with-Flux mode, where the change is reconciled before the restart. Run more than one replica (see the [sizing and scaling guide](/docs/new-relic-control/pipeline-control/gateway/sizing-and-scaling)) so the rolling restart does not drop all capacity at once.
+* **The gateway keeps running on the last-applied configuration if Agent Control is unavailable.** Configuration is delivered to the cluster and persists there. If Agent Control is temporarily disconnected from Fleet Control, the gateway continues operating with the last known-good configuration — there is no hard dependency on a live New Relic connection to keep telemetry flowing.
+* **Clean teardown is explicit.** Without Flux, the configuration ConfigMap is not owned by the Agent Control deployment, so deleting Agent Control directly leaves the ConfigMap (and a still-running gateway) in place — use `helm uninstall` for a clean removal. With Flux, `helm uninstall` does **not** remove Flux's cluster-scoped CRDs; remove them explicitly if you want the cluster returned to its pre-install state.
+
+## Audit trail
+
+All Agent Control operations against the Kubernetes API are auditable via the standard Kubernetes audit log.
+
+**Without Flux**, the relevant entries are:
+
+- **Actor:** the Agent Control ServiceAccount (`system:serviceaccount:<namespace>:<serviceaccount-name>`)
+- **Resource:** `configmaps`
+- **Namespace:** your sub-agents namespace
+- **Verbs:** `create`, `patch`, `update` (triggered when a pipeline rule changes in the UI)
+
+No Agent Control activity will appear against Flux CRD resources (`helmreleases`, `helmcharts`, `helmrepositories`) in this mode.
+
+**With Flux**, you will additionally see the same actor writing `helmreleases` and `helmrepositories` when the gateway is installed or upgraded.
+
+Separately, **every pipeline-rule change made in the Pipeline Control UI is recorded in the New Relic audit log** (NerdGraph `actor.nerdStorage` events), giving you a correlated record of *who changed a rule and when* alongside the *when Agent Control applied it* record in your kube audit log.
+
+### GitOps integration
+
+If your organization uses a GitOps model where only a CI/CD pipeline (for example, GitHub Actions) is authorized to write to the Kubernetes API, Agent Control's writes will appear as a second write actor alongside your pipeline. The following approaches reconcile this:
+
+- **Audit log monitoring:** treat Agent Control's service account as a known, approved actor. Its writes are predictable — without Flux, a single ConfigMap in a fixed namespace, triggered only by pipeline-rule changes in the New Relic UI.
+- **Namespace isolation:** because RoleBindings scope Agent Control to two specific namespaces (without Flux), you can apply separate admission policies (for example, OPA/Kyverno) to those namespaces without affecting the rest of your cluster.
+- **Change notifications:** the New Relic UI audit log gives you the correlated "who and when" record described above.
+
+If your change-control policy cannot accommodate New Relic reconciling the gateway's Helm release, **without-Flux mode is the right fit** — it removes Agent Control from the install/upgrade path entirely and leaves only the predictable ConfigMap write.
+
+## What Agent Control does not do
+
+In **configuration-only mode (without Flux)**, Agent Control does **not**:
+
+- Accept inbound connections from New Relic or any external system
+- Install, upgrade, or restart the gateway (you own the gateway lifecycle)
+- Install Flux controllers or create Flux CRDs
+- Require cluster-admin or a ClusterRoleBinding
+- Pull gateway container images or Helm charts
+- Write to any namespace outside the two it is scoped to
+- Use SSH, service account token projection, or privileged containers
+- Apply any configuration whose New Relic signature does not verify
+
+In **standard mode (with Flux)**, Agent Control still accepts no inbound connections and applies only signed configuration; the difference is that its embedded Flux does install and upgrade the gateway, and therefore reaches the Helm chart repository and image registry outbound.
+
+## Scaling the gateway
+
+Gateway scaling uses standard Kubernetes mechanisms (the Horizontal Pod Autoscaler) in both modes — Agent Control health-checks the gateway but does not scale it. For sizing recommendations and the autoscaling values to use, see the [gateway sizing and scaling guide](/docs/new-relic-control/pipeline-control/gateway/sizing-and-scaling). Running more than one replica also limits the telemetry-gap exposure during the rolling restart triggered by a configuration change (see [Operational behavior](#operational-behavior-to-be-aware-of)). Without Flux, scaling changes require a Helm upgrade on your side; with Flux, they are reconciled for you.
+
+### Multi-cluster deployments
+
+Deploy one Agent Control instance and one gateway per cluster. Each Agent Control instance connects independently to Fleet Control and applies the same fleet configuration to its local cluster. There is no cross-cluster coordination.
+
+For regional deployments, the recommended pattern is one gateway cluster per region. This bounds the blast radius of a cluster failure to a single region's telemetry and avoids cross-region egress costs.
+
+```
+Region A                         Region B
+┌─────────────────┐              ┌─────────────────┐
+│  Agent Control  │──outbound──▶ │  Fleet Control  │
+│  + PCG          │              │  (New Relic)     │
+└─────────────────┘              │                 │
+                                 │                 │
+Region B                         │                 │
+┌─────────────────┐              │                 │
+│  Agent Control  │──outbound──▶ │                 │
+│  + PCG          │              └─────────────────┘
+└─────────────────┘
+```
+
+Each Agent Control in each region independently pulls configuration from Fleet Control. A failure of one Agent Control instance does not affect other regions, and each gateway continues operating with its last-applied configuration even if Agent Control is temporarily unavailable.
+
+### DaemonSet mode
+
+If you require a gateway pod on every node (for example, to capture node-local telemetry without network hops), deploy the gateway in DaemonSet mode by setting `daemonset.enabled: true` in your `pcg-values.yaml`. Agent Control health checks cover both Deployment and DaemonSet topology automatically.

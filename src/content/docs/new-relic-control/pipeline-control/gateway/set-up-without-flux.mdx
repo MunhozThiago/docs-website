@@ -1,0 +1,163 @@
+---
+title: Install Pipeline Control gateway without Flux
+metaDescription: 'Install the Pipeline Control gateway without Flux: New Relic manages your pipeline configuration while you own the gateway lifecycle.'
+freshnessValidatedDate: never
+---
+
+New Relic Control has two central pieces to make your desired state easily achievable. The first is **Fleet Control** — the service that manages configurations, deployments, and a persistent connection with every Agent Control instance installed in your machines. On its side, **Agent Control** is the delivery mechanism: it runs as a lightweight process alongside the gateway, maintains a persistent connection to Fleet Control, and receives configuration updates via that connection. When Fleet Control pushes a new pipeline configuration, Agent Control writes it to the gateway — no Helm upgrade needed on your end. (See [Fleet Control](/docs/new-relic-control/fleet-control/overview) and [Agent Control](/docs/new-relic-control/agent-control/overview).)
+
+In the standard installation, Agent Control also manages the gateway lifecycle (installs, upgrades, restarts) using an embedded Flux CD instance. If you decide to install without Flux, that lifecycle component is disabled. Agent Control is present only for configuration delivery and health reporting. Everything else is yours to manage.
+
+When you install the gateway without Flux, you take ownership of the gateway's lifecycle — installation, version upgrades, and scaling. New Relic continues to manage your pipeline configuration: filter, sampling, and transform rules you define in the Pipeline Control UI are applied to your cluster automatically, without any Helm operations on your part.
+
+To make this work, this mode requires you to install two Helm charts: the Pipeline Control Gateway chart and the Agent Control chart.
+
+## Security and permissions
+
+Agent Control communicates via **outbound HTTPS only** — New Relic never initiates a connection into your cluster. All configuration is pulled by Agent Control from Fleet Control, verified against New Relic's cryptographic signature, then written to a single ConfigMap in your cluster. No inbound ports or webhooks are required.
+
+Kubernetes permissions are scoped via **RoleBindings** (not ClusterRoleBindings) to exactly two namespaces: the Agent Control namespace and the sub-agents namespace. Agent Control has no access to any other namespace in your cluster.
+
+Compared with the standard install, the without-Flux mode keeps the smallest in-cluster permission surface and removes New Relic from the gateway's image-pull and upgrade path entirely — Agent Control reaches neither the Helm chart repository nor any image registry in this mode.
+
+For a side-by-side breakdown of network endpoints, RBAC rules, configuration integrity, audit log behavior, GitOps compatibility, and scaling guidance **with and without Flux**, see [Security and permissions reference](/docs/new-relic-control/pipeline-control/gateway/security-and-permissions).
+
+## Before you begin
+
+Verify your environment meets the [requirements listed in the standard gateway setup](/docs/new-relic-control/pipeline-control/gateway/set-up-and-deploy-pipeline-control#considerations-for-using-gateway).
+
+## Install
+
+Follow the [standard gateway setup](/docs/new-relic-control/pipeline-control/gateway/set-up-and-deploy-pipeline-control) through the fleet selection step. When prompted to choose an installation mode, select **Configuration only (without Flux)** — that is where this flow diverges.
+
+<Callout variant="tip">
+  If you select an existing fleet, the guided install detects its mode and locks your choice. A fleet configured without Flux cannot be switched to full management mode, and vice versa.
+</Callout>
+
+1. In **Configure the gateway**, enter your cluster name and the namespace where both the gateway and Agent Control will be installed. The default namespace is `newrelic`.
+
+2. Configure autoscaling for the gateway. The guided install pre-fills the autoscaling bounds; adjust them to match your expected telemetry volume. For sizing recommendations, see the [gateway sizing and scaling guide](/docs/new-relic-control/pipeline-control/gateway/sizing-and-scaling).
+
+3. Download the generated `pcg-values.yaml` file and install the gateway chart:
+
+   ```bash
+   helm repo add newrelic https://helm-charts.newrelic.com && helm repo update
+
+   kubectl create namespace <NAMESPACE>
+
+   helm upgrade --install newrelic-pcg newrelic/pipeline-control-gateway \
+     -n <NAMESPACE> --values pcg-values.yaml
+   ```
+
+   The generated `pcg-values.yaml` includes a `deployment.customConfigMap` field that wires the gateway to receive pipeline configuration updates from Fleet Control automatically — do not remove it.
+
+   ```yaml
+   global:
+     cluster: <YOUR_CLUSTER_NAME>
+     licenseKey: <YOUR_LICENSE_KEY>
+   deployment:
+     customConfigMap: pipeline-control-gateway-custom-config
+   autoscaling:
+     enabled: true
+     minReplicas: 2
+     maxReplicas: 10
+     targetCPUUtilizationPercentage: 60
+   ```
+
+4. Verify the gateway pods are running before continuing:
+
+   ```bash
+   kubectl get pods -n <NAMESPACE> -l app=pipeline-control-gateway
+   ```
+
+   Wait for the pod status to show `2/2 Running` before proceeding to the next step.
+
+5. Download the generated `agent-control-deployment-values.yaml` file and install Agent Control:
+
+   ```bash
+   helm upgrade --install agent-control-deployment newrelic/agent-control-deployment \
+     -n <NAMESPACE> --values agent-control-deployment-values.yaml
+   ```
+
+   The generated values file sets `config.cdEnabled: false`, which disables the embedded Flux instance and signals to Fleet Control that the gateway lifecycle is customer-managed:
+
+   ```yaml
+   global:
+     cluster: <YOUR_CLUSTER_NAME>
+     licenseKey: <YOUR_LICENSE_KEY>
+   config:
+     cdEnabled: false
+     fleet_control:
+       fleet_id: <YOUR_FLEET_ID>
+     agents: {}
+   systemIdentity:
+     organizationId: <YOUR_ORG_ID>
+     parentIdentity:
+       clientId: <CLIENT_ID>
+       clientSecret: <CLIENT_SECRET>
+   ```
+
+   <Callout variant="important">
+     The `clientSecret` embedded in the generated values file expires after **12 hours**. If this step fails with `Expired client secret`, restart the guided install to generate fresh credentials.
+   </Callout>
+
+6. Click **Verify Agent Heartbeat** in the guided install. It polls your cluster for up to five minutes to confirm Agent Control has connected to Fleet Control.
+
+7. Once the heartbeat is confirmed, click **Deploy Configuration**. This pushes the initial pipeline configuration to your cluster and completes the installation.
+
+   <Callout variant="tip">
+     After installation, Agent Control may report limited health status in Fleet Control. This is expected in configuration-only mode — it reflects that Agent Control is not managing the gateway lifecycle, not a connectivity issue.
+   </Callout>
+
+## Route telemetry through the gateway
+
+This is identical to the standard gateway setup. Point your agents and collectors at the gateway endpoint instead of directly at New Relic — see [Modify agent configuration](/docs/new-relic-control/pipeline-control/gateway/modify-agent-configuration) for per-agent instructions and a full compatibility matrix.
+
+Once your sources are routed through the gateway, data flows through the pipeline rules you configure in the Pipeline Control UI. For an explanation of how sampling, filtering, and transformation work and what each stage does to your data before it reaches New Relic, see [Understanding your ingest pipeline](/docs/new-relic-control/pipeline-control/ingest-pipeline).
+
+## Update the gateway
+
+Because you own the gateway lifecycle, version upgrades require a Helm upgrade. Pipeline configuration changes — rules you add or modify in the Pipeline Control UI — are applied to your cluster automatically and do not require any Helm operation.
+
+<Callout variant="important">
+  These are two independent operations. A Helm upgrade changes the gateway version. A configuration change updates the pipeline rules. Neither triggers the other.
+</Callout>
+
+### Upgrade the gateway version
+
+1. Review the [Pipeline Control gateway release notes](/docs/release-notes/pipeline-control-gateway-release-notes) for breaking changes before upgrading.
+
+2. Run the upgrade, keeping the same values file you used during installation:
+
+   ```bash
+   helm repo update
+
+   helm upgrade newrelic-pcg newrelic/pipeline-control-gateway \
+     -n <NAMESPACE> \
+     --version <NEW_VERSION> \
+     --values pcg-values.yaml
+   ```
+
+3. Monitor the rollout:
+
+   ```bash
+   kubectl rollout status deployment/newrelic-pcg -n <NAMESPACE>
+   ```
+
+Agent Control does not need to be upgraded as part of a gateway version change — the two charts are versioned independently.
+
+### Update pipeline configuration rules
+
+Pipeline rules are managed entirely through the Pipeline Control UI and do not require a Helm upgrade. Changes you make are pushed to your cluster and applied without restarting the gateway. See [Gateway UI guide](/docs/new-relic-control/pipeline-control/gateway/ui-guide) or [Gateway YAML configuration reference](/docs/new-relic-control/pipeline-control/gateway/yaml-overview).
+
+## Scale the gateway
+
+Because you own the gateway lifecycle, scaling is managed through standard Kubernetes mechanisms — not through Agent Control or Fleet Control. HPA is enabled by default in the generated `pcg-values.yaml`. For sizing recommendations and the autoscaling values to use, see the [gateway sizing and scaling guide](/docs/new-relic-control/pipeline-control/gateway/sizing-and-scaling). Changes to autoscaling configuration require a Helm upgrade and are independent of Agent Control and pipeline rule updates.
+
+### Multiple clusters and regions
+
+Deploy one Agent Control instance and one gateway per cluster. Each instance connects independently to Fleet Control and receives the same fleet configuration. For regional deployments, deploy one gateway cluster per region to bound failure blast radius and avoid cross-region egress costs.
+
+Agent Control instances across clusters do not coordinate with each other. If Agent Control is temporarily unavailable, the gateway continues running with the last-applied ConfigMap until connectivity is restored.
+
+For architecture diagrams and additional scaling patterns, see [Security and permissions reference](/docs/new-relic-control/pipeline-control/gateway/security-and-permissions#scaling-the-gateway).
