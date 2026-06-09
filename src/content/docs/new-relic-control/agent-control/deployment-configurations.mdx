@@ -50,6 +50,13 @@ The delivery mechanism varies by environment:
 - **Kubernetes:** Agent Control embeds a [Flux CD](https://fluxcd.io/) instance that manages agents using `HelmRelease` and `HelmRepository` Kubernetes CRDs. Agents are Helm charts deployed through this Flux instance.
 - **Linux and Windows hosts:** Agents are distributed as OCI-compatible packages. Agent Control downloads, installs, and supervises them as system services.
 
+### Security and permissions
+
+The trust model is the same in every deployment configuration: Agent Control connects to New Relic over **outbound HTTPS only**, and applies only configuration that New Relic has **cryptographically signed** and that Agent Control verifies before writing anything to your environment. What changes between configurations is the in-cluster permission footprint and the required outbound egress — not whether New Relic can reach into your environment (it cannot).
+
+- For the cross-cutting model (TLS, configuration signing, system identities, secrets handling, proxy support), see [Fleet Control security](/docs/new-relic-control/fleet-control/security).
+- For a worked, side-by-side breakdown of Kubernetes RBAC, network egress, audit behavior, and change-control impact **with and without Flux**, see [Pipeline Control gateway: security and permissions](/docs/new-relic-control/pipeline-control/gateway/security-and-permissions). The gateway is the clearest worked example, but the RBAC and egress differences described there apply to the standard and custom-Flux configurations generally.
+
 ### Get started
 
 Follow the [Install Agent Control](/docs/new-relic-control/agent-control/setup) guide for step-by-step instructions for your environment.
@@ -221,6 +228,10 @@ Agent Control handles configuration distribution from Fleet Control but does **n
 
 **Intended for:** Organizations with strict change management processes, immutable infrastructure patterns, or compliance requirements that prohibit automated software installation from an external service.
 
+<Callout variant="tip" title="Available today for the Pipeline Control gateway">
+  A configuration-only deployment is already available specifically for the **Pipeline Control gateway**: Agent Control delivers the gateway's pipeline configuration while you own the gateway's installation and upgrades. See [Install Pipeline Control gateway without Flux](/docs/new-relic-control/pipeline-control/gateway/set-up-without-flux) and its [security and permissions reference](/docs/new-relic-control/pipeline-control/gateway/security-and-permissions). The general-purpose configuration-only mode for other agents described here is still on the roadmap.
+</Callout>
+
 | | Planned behavior |
 | :--- | :--- |
 | Agent lifecycle | ❌ Not managed by Agent Control |
@@ -257,7 +268,7 @@ Agent Control reports agent health and current configuration to Fleet Control bu
   </DocTile>
 
   <DocTile
-    title="Supported agent types"
+    title="Supported environments and agent types"
     path="/docs/new-relic-control/agent-control/agent-types"
   >
     Review which agents are supported across all environments.
